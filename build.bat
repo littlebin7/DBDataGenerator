@@ -81,6 +81,16 @@ if not exist "dist\configs" mkdir dist\configs
 copy /Y configs\config.yaml dist\configs\ >nul
 echo ✓ 配置文件已复制
 
+:: 复制前端文件到 dist 目录
+echo.
+echo [6/6] 复制前端文件...
+xcopy /E /I /Y web\dist dist\web\dist >nul
+if %errorlevel% neq 0 (
+    echo 警告: 前端文件复制失败，请手动复制 web\dist 到 dist\web\dist
+) else (
+    echo ✓ 前端文件已复制到 dist\web\dist
+)
+
 :: 创建说明文件
 echo.
 echo ========================================
@@ -90,9 +100,12 @@ echo.
 echo 输出目录: dist\
 echo   - DBDataGenerator.exe  (主程序)
 echo   - configs\config.yaml  (配置文件)
+echo   - web\dist\  (前端文件)
 echo.
-echo 前端文件已嵌入，运行 DBDataGenerator.exe 即可启动服务
+echo 运行 DBDataGenerator.exe 即可启动服务
 echo 默认访问地址: http://localhost:8080
+echo.
+echo 注意: 请确保在 dist 目录下运行程序，或确保 web\dist 目录存在
 echo.
 pause
 

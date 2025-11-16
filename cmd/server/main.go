@@ -62,24 +62,58 @@ func main() {
 	})
 
 	// 静态文件服务（前端）
+	// 检查前端文件是否存在
+	indexPath := "./web/dist/index.html"
+	if _, err := os.Stat(indexPath); os.IsNotExist(err) {
+		logger.Warn("前端文件不存在，请先构建前端",
+			zap.String("path", indexPath),
+			zap.String("hint", "运行: cd web && npm run build"),
+		)
+	} else {
+		logger.Info("前端文件已找到", zap.String("path", indexPath))
+	}
+
 	// 先设置静态资源（JS、CSS、图片等）
 	router.Static("/assets", "./web/dist/assets")
 	router.StaticFile("/favicon.ico", "./web/dist/favicon.ico")
 
+	// 根路径直接返回 index.html
+	router.GET("/", func(c *gin.Context) {
+		if _, err := os.Stat(indexPath); os.IsNotExist(err) {
+			logger.Error("前端文件不存在", zap.String("path", indexPath))
+			c.String(http.StatusInternalServerError,
+				"前端文件未找到，请先运行: cd web && npm run build")
+			return
+		}
+		c.File(indexPath)
+	})
+
 	// SPA 路由：所有非 API、非 WebSocket、非静态资源的请求都返回 index.html
 	router.NoRoute(func(c *gin.Context) {
 		path := c.Request.URL.Path
-		// 如果是 API 或 WebSocket 请求，返回 404
+		// 如果是 API 请求，返回 404
 		if len(path) >= 4 && path[:4] == "/api" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
 			return
 		}
+		// 如果是 WebSocket 请求，返回 404
 		if len(path) >= 3 && path[:3] == "/ws" {
 			c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
 			return
 		}
+		// 如果是静态资源请求，返回 404（应该已经被上面的 Static 处理了）
+		if len(path) >= 7 && path[:7] == "/assets" {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+			return
+		}
 		// 其他请求返回 index.html（支持前端路由）
-		c.File("./web/dist/index.html")
+		if _, err := os.Stat(indexPath); os.IsNotExist(err) {
+			logger.Error("前端文件不存在", zap.String("path", indexPath))
+			c.String(http.StatusInternalServerError,
+				"前端文件未找到，请先运行: cd web && npm run build")
+			return
+		}
+		c.File(indexPath)
 	})
 
 	// 创建 HTTP 服务器

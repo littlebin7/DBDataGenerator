@@ -20,6 +20,7 @@ build.bat
 打包完成后，在 `dist/` 目录下会生成：
 - `DBDataGenerator.exe` - 主程序
 - `configs/config.yaml` - 配置文件
+- `web/dist/` - 前端构建产物（已复制）
 
 #### Linux/Mac
 
@@ -31,6 +32,7 @@ chmod +x build.sh
 打包完成后，在 `dist/` 目录下会生成：
 - `DBDataGenerator` - 主程序
 - `configs/config.yaml` - 配置文件
+- `web/dist/` - 前端构建产物（已复制）
 
 ### 方式二：手动打包
 
@@ -91,10 +93,13 @@ dist/
 ├── configs/
 │   └── config.yaml     # 配置文件
 └── web/
-    └── dist/           # 前端构建产物（运行时需要）
+    └── dist/           # 前端构建产物（已自动复制）
 ```
 
-**注意**：程序运行时需要 `web/dist/` 目录存在，确保前端文件在可执行文件同级或相对路径下。
+**注意**：
+- 程序运行时会在当前目录查找 `web/dist/` 目录
+- 打包脚本已自动将前端文件复制到 `dist/web/dist/`
+- 请确保在 `dist/` 目录下运行程序，或确保 `web/dist/` 目录在正确位置
 
 ### 2. 运行程序
 

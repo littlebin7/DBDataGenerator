@@ -68,10 +68,21 @@ echo "✓ 后端编译完成"
 
 # 复制必要文件
 echo ""
-echo "[5/5] 复制必要文件..."
+echo "[5/6] 复制必要文件..."
 mkdir -p dist/configs
 cp configs/config.yaml dist/configs/ 2>/dev/null || true
 echo "✓ 配置文件已复制"
+
+# 复制前端文件到 dist 目录
+echo ""
+echo "[6/6] 复制前端文件..."
+mkdir -p dist/web
+cp -r web/dist dist/web/ 2>/dev/null || true
+if [ $? -eq 0 ]; then
+    echo "✓ 前端文件已复制到 dist/web/dist"
+else
+    echo "警告: 前端文件复制失败，请手动复制 web/dist 到 dist/web/dist"
+fi
 
 # 设置执行权限
 chmod +x dist/DBDataGenerator
