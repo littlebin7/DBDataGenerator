@@ -18,7 +18,7 @@ coverage.*
 profile.cov
 
 # Dependency directories (remove the comment below to include it)
-# vendor/
+vendor/
 
 # Go workspace file
 go.work
@@ -27,6 +27,22 @@ go.work.sum
 # env file
 .env
 
+# connection config
+connections.json
+
+# templates
+templates.json
+
+# SQLite database
+data/
+*.db
+*.db-shm
+*.db-wal
+
 # Editor/IDE
-# .idea/
-# .vscode/
+.idea/
+.vscode/
+
+web/node_modules
+web/dist
+dist

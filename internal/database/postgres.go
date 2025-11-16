@@ -1,0 +1,308 @@
+package database
+
+import (
+	"context"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+type PostgresDB struct {
+	pool   *pgxpool.Pool
+	config *ConnectionConfig
+}
+
+func NewPostgresDB() *PostgresDB {
+	return &PostgresDB{}
+}
+
+func (db *PostgresDB) Connect(config *ConnectionConfig) error {
+	db.config = config
+
+	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s",
+		config.Host, config.Port, config.User, config.Password, config.Database)
+
+	if config.SSLMode != "" {
+		dsn += " sslmode=" + config.SSLMode
+	} else {
+		dsn += " sslmode=disable"
+	}
+
+	poolConfig, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return fmt.Errorf("解析连接字符串失败: %w", err)
+	}
+
+	// 设置连接超时
+	poolConfig.ConnConfig.ConnectTimeout = 5 * time.Second
+
+	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
+	if err != nil {
+		return fmt.Errorf("创建连接池失败: %w", err)
+	}
+
+	// 测试连接（带超时）
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := pool.Ping(ctx); err != nil {
+		return fmt.Errorf("连接测试失败: %w", err)
+	}
+
+	db.pool = pool
+	return nil
+}
+
+func (db *PostgresDB) Disconnect() error {
+	if db.pool != nil {
+		db.pool.Close()
+	}
+	return nil
+}
+
+func (db *PostgresDB) TestConnection() error {
+	if db.pool == nil {
+		return fmt.Errorf("数据库未连接")
+	}
+	return db.pool.Ping(context.Background())
+}
+
+func (db *PostgresDB) GetDatabases() ([]string, error) {
+	query := "SELECT datname FROM pg_database WHERE datistemplate = false"
+	rows, err := db.pool.Query(context.Background(), query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var databases []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		databases = append(databases, name)
+	}
+	return databases, nil
+}
+
+func (db *PostgresDB) GetTables(database string) ([]string, error) {
+	query := `
+		SELECT table_name 
+		FROM information_schema.tables 
+		WHERE table_schema = 'public' 
+		AND table_type = 'BASE TABLE'
+		ORDER BY table_name
+	`
+	rows, err := db.pool.Query(context.Background(), query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var tables []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		tables = append(tables, name)
+	}
+	return tables, nil
+}
+
+func (db *PostgresDB) GetTableSchema(database, table string) (*TableSchema, error) {
+	// 获取字段信息
+	query := `
+		SELECT 
+			c.column_name,
+			c.data_type,
+			c.character_maximum_length,
+			c.numeric_precision,
+			c.numeric_scale,
+			c.is_nullable,
+			c.column_default,
+			(SELECT COUNT(*) > 0 FROM information_schema.table_constraints tc
+			 JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
+			 WHERE tc.table_name = c.table_name AND kcu.column_name = c.column_name 
+			 AND tc.constraint_type = 'PRIMARY KEY') as is_pk,
+			(SELECT COUNT(*) > 0 FROM information_schema.table_constraints tc
+			 JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name
+			 WHERE tc.table_name = c.table_name AND kcu.column_name = c.column_name 
+			 AND tc.constraint_type = 'UNIQUE') as is_unique
+		FROM information_schema.columns c
+		WHERE c.table_schema = 'public' AND c.table_name = $1
+		ORDER BY c.ordinal_position
+	`
+
+	rows, err := db.pool.Query(context.Background(), query, table)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	schema := &TableSchema{
+		TableName: table,
+		Fields:    []FieldInfo{},
+	}
+
+	for rows.Next() {
+		var field FieldInfo
+		var maxLength, precision, scale *int
+		var isPk, isUnique bool
+
+		err := rows.Scan(
+			&field.Name,
+			&field.Type,
+			&maxLength,
+			&precision,
+			&scale,
+			&field.IsNullable,
+			&field.DefaultValue,
+			&isPk,
+			&isUnique,
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		field.IsPrimaryKey = isPk
+		field.IsUnique = isUnique
+		if maxLength != nil {
+			field.MaxLength = *maxLength
+		}
+		if precision != nil {
+			field.Precision = *precision
+		}
+		if scale != nil {
+			field.Scale = *scale
+		}
+
+		// 映射 Go 类型
+		field.GoType = db.mapPostgresTypeToGo(field.Type)
+
+		// 获取外键信息
+		fkQuery := `
+			SELECT 
+				ccu.table_name AS foreign_table_name
+			FROM information_schema.table_constraints AS tc
+			JOIN information_schema.key_column_usage AS kcu
+				ON tc.constraint_name = kcu.constraint_name
+			JOIN information_schema.constraint_column_usage AS ccu
+				ON ccu.constraint_name = tc.constraint_name
+			WHERE tc.constraint_type = 'FOREIGN KEY'
+				AND tc.table_name = $1
+				AND kcu.column_name = $2
+		`
+		var foreignTable string
+		err = db.pool.QueryRow(context.Background(), fkQuery, table, field.Name).Scan(&foreignTable)
+		if err == nil && foreignTable != "" {
+			field.IsForeignKey = true
+			field.ForeignTable = foreignTable
+		}
+
+		schema.Fields = append(schema.Fields, field)
+	}
+
+	return schema, nil
+}
+
+func (db *PostgresDB) BatchInsert(database, table string, rows []map[string]interface{}) error {
+	if len(rows) == 0 {
+		return nil
+	}
+
+	// 获取字段名
+	fields := make([]string, 0, len(rows[0]))
+	for field := range rows[0] {
+		fields = append(fields, field)
+	}
+
+	// 构建 INSERT 语句
+	placeholders := make([]string, len(fields))
+	for i := range placeholders {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+	}
+
+	query := fmt.Sprintf(
+		"INSERT INTO %s (%s) VALUES (%s)",
+		table,
+		strings.Join(fields, ","),
+		strings.Join(placeholders, ","),
+	)
+
+	// 从连接池获取连接
+	conn, err := db.pool.Acquire(context.Background())
+	if err != nil {
+		return fmt.Errorf("获取连接失败: %w", err)
+	}
+	defer conn.Release()
+
+	// 批量插入
+	batch := &pgx.Batch{}
+	for _, row := range rows {
+		values := make([]interface{}, len(fields))
+		for i, field := range fields {
+			values[i] = row[field]
+		}
+		batch.Queue(query, values...)
+	}
+
+	results := conn.SendBatch(context.Background(), batch)
+	defer results.Close()
+
+	// 执行所有批次
+	for i := 0; i < len(rows); i++ {
+		_, err := results.Exec()
+		if err != nil {
+			return fmt.Errorf("插入第 %d 行失败: %w", i+1, err)
+		}
+	}
+
+	return nil
+}
+
+func (db *PostgresDB) GetForeignTableData(database, table, field string, limit int) ([]interface{}, error) {
+	query := fmt.Sprintf("SELECT %s FROM %s LIMIT $1", field, table)
+	rows, err := db.pool.Query(context.Background(), query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var values []interface{}
+	for rows.Next() {
+		var value interface{}
+		if err := rows.Scan(&value); err != nil {
+			return nil, err
+		}
+		values = append(values, value)
+	}
+	return values, nil
+}
+
+func (db *PostgresDB) mapPostgresTypeToGo(dbType string) string {
+	dbType = strings.ToLower(dbType)
+	switch {
+	case strings.Contains(dbType, "int"):
+		return "int64"
+	case strings.Contains(dbType, "decimal") || strings.Contains(dbType, "numeric"):
+		return "float64"
+	case strings.Contains(dbType, "float") || strings.Contains(dbType, "double"):
+		return "float64"
+	case strings.Contains(dbType, "bool"):
+		return "bool"
+	case strings.Contains(dbType, "date") || strings.Contains(dbType, "time"):
+		return "time.Time"
+	case strings.Contains(dbType, "json"):
+		return "string"
+	case strings.Contains(dbType, "bytea") || strings.Contains(dbType, "blob"):
+		return "[]byte"
+	case strings.Contains(dbType, "uuid"):
+		return "string"
+	default:
+		return "string"
+	}
+}
