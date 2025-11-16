@@ -9,7 +9,7 @@
 
 ## 打包方式
 
-### 方式一：使用打包脚本（推荐）
+### 方式一：单平台打包
 
 #### Windows
 
@@ -33,6 +33,55 @@ chmod +x build.sh
 - `DBDataGenerator` - 主程序
 - `configs/config.yaml` - 配置文件
 - `web/dist/` - 前端构建产物（已复制）
+
+### 方式二：多平台打包（推荐用于发布）
+
+#### Windows
+
+```bash
+build-all.bat
+```
+
+#### Linux/Mac
+
+```bash
+chmod +x build-all.sh
+./build-all.sh
+```
+
+打包完成后，在 `dist-all/` 目录下会生成所有平台的版本：
+
+**Windows 平台：**
+- `windows-amd64/` - Windows 64位
+- `windows-386/` - Windows 32位
+
+**Linux 平台：**
+- `linux-amd64/` - Linux 64位
+- `linux-arm64/` - Linux ARM64
+- `linux-386/` - Linux 32位
+- `linux-arm/` - Linux ARM
+
+**macOS 平台：**
+- `darwin-amd64/` - Mac Intel
+- `darwin-arm64/` - Mac Apple Silicon
+
+**BSD 平台：**
+- `freebsd-amd64/` - FreeBSD 64位
+- `openbsd-amd64/` - OpenBSD 64位
+- `netbsd-amd64/` - NetBSD 64位
+
+**总计：12 个平台版本**
+
+每个平台目录包含：
+- 可执行文件
+- `web/dist/` - 前端文件
+- `configs/config.yaml` - 配置文件
+
+**注意**：
+- 多平台打包会一次性编译所有平台，前端只构建一次，然后复制到各个平台目录
+- **数据库支持说明**：
+  - **完整支持**（Windows 64位、Linux 64位/ARM64、macOS）：支持 PostgreSQL、MySQL/MariaDB、达梦数据库
+  - **部分支持**（Windows 32位、Linux 32位/ARM、BSD 平台）：支持 PostgreSQL、MySQL/MariaDB，**不支持达梦数据库**（因达梦数据库驱动在这些平台存在兼容性问题）
 
 ### 方式二：手动打包
 

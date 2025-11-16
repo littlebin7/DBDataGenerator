@@ -1,3 +1,11 @@
+//go:build !386 && !arm && !freebsd && !openbsd && !netbsd
+// +build !386,!arm,!freebsd,!openbsd,!netbsd
+
+// 达梦数据库驱动在以下平台不支持：
+// - 32位平台（386, arm）：存在 int 溢出问题
+// - BSD 平台（freebsd, openbsd, netbsd）：缺少 CGO 实现
+// 因此在这些平台上不编译达梦数据库支持
+
 package database
 
 import (

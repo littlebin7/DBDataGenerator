@@ -124,10 +124,27 @@ func main() {
 
 	// 启动服务器
 	go func() {
+		addr := fmt.Sprintf("http://localhost:%d", cfg.Server.Port)
+		if cfg.Server.Host != "0.0.0.0" && cfg.Server.Host != "" {
+			addr = fmt.Sprintf("http://%s:%d", cfg.Server.Host, cfg.Server.Port)
+		}
+
 		logger.Info("服务器启动",
 			zap.String("host", cfg.Server.Host),
 			zap.Int("port", cfg.Server.Port),
+			zap.String("url", addr),
 		)
+
+		// 输出访问地址到控制台
+		fmt.Println("")
+		fmt.Println("========================================")
+		fmt.Println("  数据库造数工具 - 服务已启动")
+		fmt.Println("========================================")
+		fmt.Printf("  访问地址: %s\n", addr)
+		fmt.Println("  按 Ctrl+C 停止服务")
+		fmt.Println("========================================")
+		fmt.Println("")
+
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			logger.Fatal("服务器启动失败", zap.Error(err))
 		}
