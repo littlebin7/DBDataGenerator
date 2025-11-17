@@ -4,15 +4,27 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/shirou/gopsutil/v3/net"
 	"go.uber.org/zap"
 )
 
 // SystemMetrics 系统指标
 type SystemMetrics struct {
-	CPUUsage    float64 `json:"cpu_usage"`    // CPU使用率（%）
-	MemoryUsage float64 `json:"memory_usage"` // 内存使用率（%）
-	MemoryUsed  int64   `json:"memory_used"`  // 已使用内存（字节）
-	MemoryTotal int64   `json:"memory_total"` // 总内存（字节）
+	// 主机级指标
+	HostCPUUsage    float64 `json:"host_cpu_usage"`    // 主机CPU使用率（%）
+	HostMemoryUsage float64 `json:"host_memory_usage"` // 主机内存使用率（%）
+	HostMemoryUsed  uint64  `json:"host_memory_used"`  // 主机已使用内存（字节）
+	HostMemoryTotal uint64  `json:"host_memory_total"` // 主机总内存（字节）
+	HostNetworkSent uint64  `json:"host_network_sent"` // 主机网络发送（字节）
+	HostNetworkRecv uint64  `json:"host_network_recv"` // 主机网络接收（字节）
+
+	// 应用级指标（Go进程）
+	CPUUsage    float64 `json:"cpu_usage"`    // 应用CPU使用率（%）
+	MemoryUsage float64 `json:"memory_usage"` // 应用内存使用率（%）
+	MemoryUsed  int64   `json:"memory_used"`  // 应用已使用内存（字节）
+	MemoryTotal int64   `json:"memory_total"` // 应用总内存（字节）
 	Goroutines  int     `json:"goroutines"`   // Goroutine数量
 	Timestamp   int64   `json:"timestamp"`    // 时间戳
 }
@@ -37,6 +49,8 @@ type Monitor struct {
 	lastCPU      time.Time
 	lastCPUTime  time.Duration
 	lastMemStats runtime.MemStats
+	lastNetStats net.IOCountersStat
+	lastNetTime  time.Time
 	numCPU       int
 }
 
@@ -51,10 +65,56 @@ func NewMonitor(logger *zap.Logger) *Monitor {
 
 // GetSystemMetrics 获取系统指标
 func (m *Monitor) GetSystemMetrics() *SystemMetrics {
+	// ========== 主机级指标 ==========
+
+	// 获取主机CPU使用率
+	hostCPUUsage := 0.0
+	if cpuPercents, err := cpu.Percent(time.Second, false); err == nil && len(cpuPercents) > 0 {
+		hostCPUUsage = cpuPercents[0]
+		if hostCPUUsage > 100.0 {
+			hostCPUUsage = 100.0
+		}
+	}
+
+	// 获取主机内存信息
+	hostMemoryUsed := uint64(0)
+	hostMemoryTotal := uint64(0)
+	hostMemoryUsage := 0.0
+	if memInfo, err := mem.VirtualMemory(); err == nil {
+		hostMemoryUsed = memInfo.Used
+		hostMemoryTotal = memInfo.Total
+		if memInfo.Total > 0 {
+			hostMemoryUsage = memInfo.UsedPercent
+		}
+	}
+
+	// 获取主机网络统计
+	hostNetworkSent := uint64(0)
+	hostNetworkRecv := uint64(0)
+	now := time.Now()
+	if netStats, err := net.IOCounters(false); err == nil && len(netStats) > 0 {
+		// 计算网络流量增量
+		if !m.lastNetTime.IsZero() {
+			elapsed := now.Sub(m.lastNetTime)
+			if elapsed > 0 {
+				// 计算每秒的流量增量
+				sentDelta := netStats[0].BytesSent - m.lastNetStats.BytesSent
+				recvDelta := netStats[0].BytesRecv - m.lastNetStats.BytesRecv
+				// 转换为每秒速率（字节/秒）
+				hostNetworkSent = uint64(float64(sentDelta) / elapsed.Seconds())
+				hostNetworkRecv = uint64(float64(recvDelta) / elapsed.Seconds())
+			}
+		}
+		m.lastNetStats = netStats[0]
+		m.lastNetTime = now
+	}
+
+	// ========== 应用级指标（Go进程）==========
+
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
-	// 计算内存使用率（使用Go运行时内存）
+	// 计算应用内存使用率（使用Go运行时内存）
 	memoryUsed := int64(memStats.Alloc)
 	memoryTotal := int64(memStats.Sys)
 	memoryUsage := 0.0
@@ -62,9 +122,7 @@ func (m *Monitor) GetSystemMetrics() *SystemMetrics {
 		memoryUsage = float64(memoryUsed) / float64(memoryTotal) * 100
 	}
 
-	// 改进的CPU使用率计算
-	// 使用 runtime 包计算 CPU 时间差来估算 CPU 使用率
-	now := time.Now()
+	// 改进的CPU使用率计算（应用进程）
 	elapsed := now.Sub(m.lastCPU)
 
 	// 获取当前内存统计
@@ -72,17 +130,13 @@ func (m *Monitor) GetSystemMetrics() *SystemMetrics {
 	runtime.ReadMemStats(&currentMemStats)
 
 	// 计算 CPU 时间：使用 GC 暂停时间作为参考
-	// 注意：这是估算值，实际 CPU 使用率需要系统级 API
 	cpuTime := time.Duration(currentMemStats.PauseTotalNs) / time.Nanosecond
 
 	cpuUsage := 0.0
 	if elapsed > 0 {
 		// 计算 CPU 使用率：基于 GC 暂停时间和 Goroutine 数量
-		// 这是一个估算值，实际值需要系统级监控工具
 		cpuTimeDelta := cpuTime - m.lastCPUTime
 		if cpuTimeDelta > 0 {
-			// CPU 使用率 = (CPU 时间差 / 实际时间差) * 100
-			// 考虑 CPU 核心数
 			cpuUsage = float64(cpuTimeDelta) / float64(elapsed) * 100.0
 			if cpuUsage > 100.0 {
 				cpuUsage = 100.0
@@ -90,9 +144,7 @@ func (m *Monitor) GetSystemMetrics() *SystemMetrics {
 		}
 
 		// 如果 CPU 时间计算不准确，使用 Goroutine 数量作为辅助指标
-		// 但这不是真实的 CPU 使用率，只是负载指标
 		if cpuUsage < 1.0 {
-			// 使用 Goroutine 数量作为负载参考（每个 Goroutine 约占用 0.5-2% CPU）
 			goroutineLoad := float64(runtime.NumGoroutine()) * 0.5
 			if goroutineLoad > cpuUsage {
 				cpuUsage = goroutineLoad
@@ -109,6 +161,15 @@ func (m *Monitor) GetSystemMetrics() *SystemMetrics {
 	m.lastMemStats = currentMemStats
 
 	return &SystemMetrics{
+		// 主机级指标
+		HostCPUUsage:    hostCPUUsage,
+		HostMemoryUsage: hostMemoryUsage,
+		HostMemoryUsed:  hostMemoryUsed,
+		HostMemoryTotal: hostMemoryTotal,
+		HostNetworkSent: hostNetworkSent,
+		HostNetworkRecv: hostNetworkRecv,
+
+		// 应用级指标
 		CPUUsage:    cpuUsage,
 		MemoryUsage: memoryUsage,
 		MemoryUsed:  memoryUsed,

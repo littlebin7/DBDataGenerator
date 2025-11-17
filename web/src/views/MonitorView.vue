@@ -8,52 +8,101 @@
         </div>
       </template>
 
-      <div v-loading="loading">
-        <!-- 系统指标 -->
-        <el-row :gutter="20" style="margin-bottom: 20px">
-          <el-col :span="6">
-            <el-card shadow="hover" :body-style="{ padding: '15px' }">
-              <div style="text-align: center">
-                <div style="font-size: 24px; font-weight: bold; color: #409EFF">{{ systemMetrics.cpu_usage?.toFixed(1) || 0 }}%</div>
-                <div style="color: #909399; margin-top: 5px">CPU 使用率</div>
-              </div>
-            </el-card>
-          </el-col>
-          <el-col :span="6">
-            <el-card shadow="hover" :body-style="{ padding: '15px' }">
-              <div style="text-align: center">
-                <div style="font-size: 24px; font-weight: bold; color: #67C23A">{{ formatFileSize(systemMetrics.memory_used || 0) }}</div>
-                <div style="color: #909399; margin-top: 5px">内存使用</div>
-                <div style="font-size: 12px; color: #909399; margin-top: 5px">
-                  总内存: {{ formatFileSize(systemMetrics.memory_total || 0) }}
+      <div>
+        <!-- 主机级系统指标 -->
+        <el-card shadow="hover" style="margin-bottom: 20px">
+          <template #header>
+            <span style="font-size: 16px; font-weight: 500">主机性能监控</span>
+          </template>
+          <el-row :gutter="20">
+            <el-col :span="6">
+              <el-card shadow="hover" :body-style="{ padding: '15px' }">
+                <div style="text-align: center">
+                  <div style="font-size: 24px; font-weight: bold; color: #409EFF">{{ systemMetrics.host_cpu_usage?.toFixed(1) || 0 }}%</div>
+                  <div style="color: #909399; margin-top: 5px">主机 CPU 使用率</div>
                 </div>
-              </div>
-            </el-card>
-          </el-col>
-          <el-col :span="6">
-            <el-card shadow="hover" :body-style="{ padding: '15px' }">
-              <div style="text-align: center">
-                <div style="font-size: 24px; font-weight: bold; color: #E6A23C">{{ systemMetrics.goroutines || 0 }}</div>
-                <div style="color: #909399; margin-top: 5px">Goroutines</div>
-              </div>
-            </el-card>
-          </el-col>
-          <el-col :span="6">
-            <el-card shadow="hover" :body-style="{ padding: '15px' }">
-              <div style="text-align: center">
-                <div style="font-size: 24px; font-weight: bold; color: #F56C6C">{{ taskMetrics.length || 0 }}</div>
-                <div style="color: #909399; margin-top: 5px">运行中任务</div>
-              </div>
-            </el-card>
-          </el-col>
-        </el-row>
+              </el-card>
+            </el-col>
+            <el-col :span="6">
+              <el-card shadow="hover" :body-style="{ padding: '15px' }">
+                <div style="text-align: center">
+                  <div style="font-size: 24px; font-weight: bold; color: #67C23A">{{ formatFileSize(systemMetrics.host_memory_used || 0) }}</div>
+                  <div style="color: #909399; margin-top: 5px">主机内存使用</div>
+                  <div style="font-size: 12px; color: #909399; margin-top: 5px">
+                    总内存: {{ formatFileSize(systemMetrics.host_memory_total || 0) }} ({{ systemMetrics.host_memory_usage?.toFixed(1) || 0 }}%)
+                  </div>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :span="6">
+              <el-card shadow="hover" :body-style="{ padding: '15px' }">
+                <div style="text-align: center">
+                  <div style="font-size: 24px; font-weight: bold; color: #E6A23C">{{ formatFileSize(systemMetrics.host_network_sent || 0) }}/s</div>
+                  <div style="color: #909399; margin-top: 5px">网络上传速度</div>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :span="6">
+              <el-card shadow="hover" :body-style="{ padding: '15px' }">
+                <div style="text-align: center">
+                  <div style="font-size: 24px; font-weight: bold; color: #F56C6C">{{ formatFileSize(systemMetrics.host_network_recv || 0) }}/s</div>
+                  <div style="color: #909399; margin-top: 5px">网络下载速度</div>
+                </div>
+              </el-card>
+            </el-col>
+          </el-row>
+        </el-card>
+
+        <!-- 应用级系统指标 -->
+        <el-card shadow="hover" style="margin-bottom: 20px">
+          <template #header>
+            <span style="font-size: 16px; font-weight: 500">应用性能监控</span>
+          </template>
+          <el-row :gutter="20">
+            <el-col :span="6">
+              <el-card shadow="hover" :body-style="{ padding: '15px' }">
+                <div style="text-align: center">
+                  <div style="font-size: 24px; font-weight: bold; color: #409EFF">{{ systemMetrics.cpu_usage?.toFixed(1) || 0 }}%</div>
+                  <div style="color: #909399; margin-top: 5px">应用 CPU 使用率</div>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :span="6">
+              <el-card shadow="hover" :body-style="{ padding: '15px' }">
+                <div style="text-align: center">
+                  <div style="font-size: 24px; font-weight: bold; color: #67C23A">{{ formatFileSize(systemMetrics.memory_used || 0) }}</div>
+                  <div style="color: #909399; margin-top: 5px">应用内存使用</div>
+                  <div style="font-size: 12px; color: #909399; margin-top: 5px">
+                    总内存: {{ formatFileSize(systemMetrics.memory_total || 0) }} ({{ systemMetrics.memory_usage?.toFixed(1) || 0 }}%)
+                  </div>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :span="6">
+              <el-card shadow="hover" :body-style="{ padding: '15px' }">
+                <div style="text-align: center">
+                  <div style="font-size: 24px; font-weight: bold; color: #E6A23C">{{ systemMetrics.goroutines || 0 }}</div>
+                  <div style="color: #909399; margin-top: 5px">Goroutines</div>
+                </div>
+              </el-card>
+            </el-col>
+            <el-col :span="6">
+              <el-card shadow="hover" :body-style="{ padding: '15px' }">
+                <div style="text-align: center">
+                  <div style="font-size: 24px; font-weight: bold; color: #F56C6C">{{ taskMetrics.length || 0 }}</div>
+                  <div style="color: #909399; margin-top: 5px">运行中任务</div>
+                </div>
+              </el-card>
+            </el-col>
+          </el-row>
+        </el-card>
 
         <!-- 任务性能指标 -->
         <el-card shadow="hover" style="margin-top: 20px">
           <template #header>
             <span style="font-size: 16px; font-weight: 500">任务性能指标</span>
           </template>
-          <el-table :data="taskMetrics" stripe border v-loading="loading">
+          <el-table :data="taskMetrics" stripe border>
             <el-table-column prop="task_id" label="任务ID" width="200" />
             <el-table-column prop="table_name" label="表名" width="150" />
             <el-table-column label="状态" width="100">
