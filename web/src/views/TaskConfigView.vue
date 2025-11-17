@@ -7,6 +7,7 @@
           <div>
             <el-button @click="showLoadTemplateDialog = true">从模板加载</el-button>
             <el-button @click="showSaveTemplateDialog = true">保存为模板</el-button>
+            <el-button type="success" @click="handlePreviewData">预览数据</el-button>
             <el-button @click="$router.back()">返回</el-button>
           </div>
         </div>
@@ -438,6 +439,30 @@
         <el-button type="primary" @click="applyBatchSettings">应用</el-button>
       </template>
     </el-dialog>
+
+    <!-- 数据预览对话框 -->
+    <el-dialog v-model="showPreviewDialog" title="数据预览" width="90%" :before-close="closePreview">
+      <div v-loading="previewLoading">
+        <div style="margin-bottom: 15px; display: flex; gap: 10px; align-items: center">
+          <span>预览数量：</span>
+          <el-input-number v-model="previewCount" :min="1" :max="50" :step="1" />
+          <el-button type="primary" size="small" @click="doPreview">刷新预览</el-button>
+        </div>
+        <el-table :data="previewData" border stripe max-height="500" style="width: 100%">
+          <el-table-column 
+            v-for="(value, key) in (previewData[0] || {})" 
+            :key="key"
+            :prop="key"
+            :label="key"
+            min-width="150"
+            show-overflow-tooltip
+          />
+        </el-table>
+        <div v-if="previewData.length === 0 && !previewLoading" style="text-align: center; padding: 40px; color: #909399">
+          <el-empty description="暂无预览数据" />
+        </div>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -456,6 +481,10 @@ const connectionId = ref(route.query.connection_id || '')
 const database = ref(route.query.database || '')
 const tableSchema = ref(null)
 const fieldRules = ref([])
+const showPreviewDialog = ref(false)
+const previewData = ref([])
+const previewLoading = ref(false)
+const previewCount = ref(10)
 
 const taskConfig = ref({
   name: '',
@@ -498,7 +527,7 @@ const loadTableSchema = async () => {
       defaultValue: field.default_value || field.DefaultValue
     }))
   } catch (error) {
-    ElMessage.error('加载表结构失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error('加载表结构失败: ' + (error.formattedMessage || error.message))
   }
 }
 
@@ -667,6 +696,26 @@ const getAvailableRules = (field) => {
 
 const createTask = async () => {
   try {
+    // 使用buildTableConfig构建配置
+    const config = buildTableConfig()
+    if (!config) {
+      ElMessage.error('配置无效，无法创建任务')
+      return
+    }
+
+    const taskName = taskConfig.value.name || `${tableName.value}_${Date.now()}`
+    
+    await api.createTask(taskName, connectionId.value, config)
+    ElMessage.success('任务创建成功')
+    router.push('/tasks')
+  } catch (error) {
+    ElMessage.error('创建任务失败: ' + (error.formattedMessage || error.message))
+  }
+}
+
+// 构建表配置（用于预览和创建任务）
+const buildTableConfig = () => {
+  try {
     // 构建字段规则
     const rules = fieldRules.value.map(field => {
       const rule = {
@@ -681,7 +730,7 @@ const createTask = async () => {
         default_value: field.defaultValue
       }
 
-      // 根据规则类型构建配置
+      // 根据规则类型构建配置（复用createTask中的逻辑）
       switch (field.ruleType) {
         case 'random_string':
           rule.config = {
@@ -694,7 +743,7 @@ const createTask = async () => {
           rule.config = {
             min: field.config.min || 0,
             max: field.config.max || 1000,
-            is_int: field.config.isInt || false
+            is_int: field.config.isInt !== undefined ? field.config.isInt : true
           }
           break
         case 'random_date':
@@ -773,8 +822,8 @@ const createTask = async () => {
       return rule
     })
 
-    // 构建任务配置
-    const config = {
+    // 构建表配置
+    return {
       table_name: tableName.value,
       database: database.value,
       total_rows: taskConfig.value.totalRows,
@@ -784,15 +833,42 @@ const createTask = async () => {
       on_error: 'skip',
       retry_times: 3
     }
-
-    const taskName = taskConfig.value.name || `${tableName.value}_${Date.now()}`
-    
-    await api.createTask(taskName, connectionId.value, config)
-    ElMessage.success('任务创建成功')
-    router.push('/tasks')
   } catch (error) {
-    ElMessage.error('创建任务失败: ' + (error.response?.data?.error || error.message))
+    console.error('构建配置失败:', error)
+    return null
   }
+}
+
+// 预览数据
+const handlePreviewData = async () => {
+  showPreviewDialog.value = true
+  await doPreview()
+}
+
+const doPreview = async () => {
+  previewLoading.value = true
+  try {
+    // 构建配置
+    const config = buildTableConfig()
+    if (!config) {
+      ElMessage.error('配置无效，无法预览')
+      return
+    }
+
+    const response = await api.previewData(connectionId.value, config, previewCount.value)
+    previewData.value = response.data || []
+    ElMessage.success(`成功生成 ${response.count || 0} 条预览数据`)
+  } catch (error) {
+    ElMessage.error('预览失败: ' + (error.formattedMessage || error.message))
+    previewData.value = []
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+const closePreview = () => {
+  showPreviewDialog.value = false
+  previewData.value = []
 }
 
 const loadTemplates = async () => {
@@ -940,7 +1016,7 @@ const saveTemplate = async () => {
     templateForm.value = { name: '', description: '' }
     await loadTemplates()
   } catch (error) {
-    ElMessage.error('保存模板失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error('保存模板失败: ' + (error.formattedMessage || error.message))
   }
 }
 
@@ -1073,7 +1149,7 @@ const loadTemplate = (template) => {
     ElMessage.success('模板加载成功')
     showLoadTemplateDialog.value = false
   } catch (error) {
-    ElMessage.error('加载模板失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error('加载模板失败: ' + (error.formattedMessage || error.message))
   }
 }
 
@@ -1083,7 +1159,7 @@ const deleteTemplate = async (templateId) => {
     ElMessage.success('模板已删除')
     await loadTemplates()
   } catch (error) {
-    ElMessage.error('删除模板失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error('删除模板失败: ' + (error.formattedMessage || error.message))
   }
 }
 

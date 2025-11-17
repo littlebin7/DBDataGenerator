@@ -1,6 +1,7 @@
 package main
 
 import (
+	"DBDataGenerator/internal/storage"
 	"context"
 	"fmt"
 	"log"
@@ -41,19 +42,40 @@ func main() {
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
 
-	// 使用文件存储（简单、无需 CGO）
-	// 连接配置保存在 connections.json
-	connMgr := database.NewConnectionManagerFile("./connections.json")
+	// 使用 SQLite 存储（纯 Go 实现，无需 CGO）
+	// 连接配置和模板配置保存在 data/app.db
+	storageInstance, err := storage.NewStorage("./data/app.db")
+	if err != nil {
+		logger.Fatal("初始化存储失败", zap.Error(err))
+	}
+	defer storageInstance.Close()
 
-	// 模板配置保存在 templates.json
-	templateMgr := generator.NewTemplateManager("./templates.json")
+	// 尝试从 JSON 文件迁移数据（如果存在）
+	if err := storage.MigrateFromJSON(storageInstance, "./connections.json", "./templates.json"); err != nil {
+		logger.Warn("数据迁移失败（可能是首次运行）", zap.Error(err))
+	} else {
+		logger.Info("数据迁移完成（如果存在旧数据）")
+	}
+
+	// 创建连接管理器（SQLite）
+	connMgr, err := database.NewConnectionManagerSQLite(storageInstance)
+	if err != nil {
+		logger.Fatal("初始化连接管理器失败", zap.Error(err))
+	}
+
+	// 创建模板管理器（SQLite）
+	templateMgr, err := generator.NewTemplateManagerSQLite(storageInstance)
+	if err != nil {
+		logger.Fatal("初始化模板管理器失败", zap.Error(err))
+	}
 
 	// 初始化 WebSocket Hub
 	wsHub := websocket.NewHub()
+	wsHub.SetLogger(logger) // 设置 logger
 	go wsHub.Run()
 
 	// 初始化 API 处理器
-	handler := api.NewHandler(connMgr, templateMgr, wsHub, logger)
+	handler := api.NewHandler(connMgr, templateMgr, wsHub, storageInstance, logger)
 	api.SetupRoutes(router, handler)
 
 	// WebSocket 路由

@@ -28,6 +28,46 @@ const routes = [
     path: '/task/config',
     name: 'TaskConfig',
     component: TaskConfigView
+  },
+  {
+    path: '/task-history',
+    name: 'TaskHistory',
+    component: () => import('../views/TaskHistoryView.vue')
+  },
+  {
+    path: '/monitor',
+    name: 'Monitor',
+    component: () => import('../views/MonitorView.vue')
+  },
+  {
+    path: '/pool',
+    name: 'Pool',
+    component: () => import('../views/PoolView.vue')
+  },
+  {
+    path: '/quality',
+    name: 'Quality',
+    component: () => import('../views/QualityView.vue')
+  },
+  {
+    path: '/schedule',
+    name: 'Schedule',
+    component: () => import('../views/ScheduleView.vue')
+  },
+  {
+    path: '/cascade',
+    name: 'Cascade',
+    component: () => import('../views/CascadeView.vue')
+  },
+  {
+    path: '/template',
+    name: 'Template',
+    component: () => import('../views/TemplateView.vue')
+  },
+  {
+    path: '/rollback',
+    name: 'Rollback',
+    component: () => import('../views/RollbackView.vue')
   }
 ]
 

@@ -283,6 +283,80 @@ func (db *PostgresDB) GetForeignTableData(database, table, field string, limit i
 	return values, nil
 }
 
+func (db *PostgresDB) QueryTableData(database, table string, limit, offset int) ([]map[string]interface{}, error) {
+	query := fmt.Sprintf("SELECT * FROM %s LIMIT $1 OFFSET $2", table)
+	rows, err := db.pool.Query(context.Background(), query, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("查询数据失败: %w", err)
+	}
+	defer rows.Close()
+
+	// 获取列名
+	columns := rows.FieldDescriptions()
+	columnNames := make([]string, len(columns))
+	for i, col := range columns {
+		columnNames[i] = string(col.Name)
+	}
+
+	var results []map[string]interface{}
+	for rows.Next() {
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, fmt.Errorf("扫描数据失败: %w", err)
+		}
+
+		row := make(map[string]interface{})
+		for i, col := range columnNames {
+			val := values[i]
+			// 处理[]byte类型
+			if b, ok := val.([]byte); ok {
+				row[col] = string(b)
+			} else {
+				row[col] = val
+			}
+		}
+		results = append(results, row)
+	}
+
+	return results, nil
+}
+
+func (db *PostgresDB) GetTableCount(database, table string) (int64, error) {
+	query := fmt.Sprintf("SELECT COUNT(*) FROM %s", table)
+	var count int64
+	err := db.pool.QueryRow(context.Background(), query).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("查询数据总数失败: %w", err)
+	}
+	return count, nil
+}
+
+func (db *PostgresDB) ExecuteQuery(database, query string, args ...interface{}) (int64, error) {
+	var count int64
+	err := db.pool.QueryRow(context.Background(), query, args...).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("执行查询失败: %w", err)
+	}
+	return count, nil
+}
+
+func (db *PostgresDB) GetDBType() string {
+	return "postgres"
+}
+
+func (db *PostgresDB) ExecuteNonQuery(database, query string, args ...interface{}) (int64, error) {
+	result, err := db.pool.Exec(context.Background(), query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("执行非查询 SQL 失败: %w", err)
+	}
+	return result.RowsAffected(), nil
+}
+
 func (db *PostgresDB) mapPostgresTypeToGo(dbType string) string {
 	dbType = strings.ToLower(dbType)
 	switch {

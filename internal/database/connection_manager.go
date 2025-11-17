@@ -7,6 +7,8 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+
+	"DBDataGenerator/internal/storage"
 )
 
 // ConnectionManager 数据库连接管理器
@@ -28,6 +30,7 @@ type ConnectionInfo struct {
 // ConnectionManager 连接管理器接口
 type ConnectionManagerInterface interface {
 	AddConnection(name string, config *ConnectionConfig) (string, error)
+	UpdateConnection(connID string, name string, config *ConnectionConfig) error
 	GetConnection(connID string) (*ConnectionInfo, error)
 	GetAllConnections() []*ConnectionInfo
 	RemoveConnection(connID string) error
@@ -75,7 +78,7 @@ func (cm *ConnectionManager) AddConnection(name string, config *ConnectionConfig
 
 	cm.connections[connID] = connInfo
 
-	// 保存配置
+	// 保存配置（密码在保存时会加密）
 	_ = cm.SaveConnections() // 忽略错误，不影响连接创建
 
 	return connID, nil
@@ -179,10 +182,18 @@ func (cm *ConnectionManager) SaveConnections() error {
 	// 准备保存的数据（不包含 Database 对象）
 	saveData := make([]*ConnectionInfo, 0, len(cm.connections))
 	for _, conn := range cm.connections {
+		// 创建配置副本并加密密码
+		configCopy := *conn.Config
+		encryptedPassword, err := storage.EncryptPassword(configCopy.Password)
+		if err == nil {
+			configCopy.Password = encryptedPassword
+		}
+		// 如果加密失败，保持原密码（向后兼容）
+
 		saveData = append(saveData, &ConnectionInfo{
 			ID:       conn.ID,
 			Name:     conn.Name,
-			Config:   conn.Config,
+			Config:   &configCopy,
 			IsActive: conn.IsActive,
 		})
 	}
@@ -221,6 +232,14 @@ func (cm *ConnectionManager) LoadConnections() error {
 
 	// 恢复连接（但不自动连接，需要用户手动连接）
 	for _, conn := range connections {
+		// 尝试解密密码（如果是加密的）
+		if conn.Config != nil && conn.Config.Password != "" {
+			decryptedPassword, err := storage.DecryptPassword(conn.Config.Password)
+			if err == nil {
+				conn.Config.Password = decryptedPassword
+			}
+			// 如果解密失败，保持原值（可能是未加密的旧密码）
+		}
 		cm.connections[conn.ID] = conn
 	}
 

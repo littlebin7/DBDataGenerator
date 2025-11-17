@@ -4,16 +4,26 @@
 
 ## 功能特性
 
-- ✅ 支持多种数据库：PostgreSQL、MySQL、MariaDB、达梦数据库
+- ✅ 支持多种数据库：PostgreSQL、MySQL、MariaDB、达梦数据库、SQLite、SQL Server、Oracle
 - ✅ 丰富的生成规则：14种规则类型（随机、固定、递增、列表、正则、函数、模板、引用字段、地理数据、文件读取、二进制/图片等）
 - ✅ 智能规则过滤：根据字段类型自动过滤可用规则，避免配置错误
 - ✅ 多线程并发生成，支持动态调整线程数
-- ✅ 任务管理：创建、启动、暂停、恢复、停止、删除
-- ✅ 连接管理：多连接管理、连接测试、树形结构选择
-- ✅ 模板管理：保存和加载配置模板，提高复用性
+- ✅ 任务管理：创建、启动、暂停、恢复、停止、删除、复制
+- ✅ 连接管理：多连接管理、连接测试、编辑、切换、树形结构选择
+- ✅ 模板管理：保存和加载配置模板，预设模板库，提高复用性
 - ✅ Web 界面：简洁美观的前端界面
 - ✅ 实时进度：WebSocket 实时推送任务状态和进度
 - ✅ 约束处理：自动处理主键、外键、唯一约束等
+- ✅ 数据预览：生成前预览示例数据
+- ✅ 数据导入导出：支持数据导入导出功能
+- ✅ 定时任务：支持 Cron 表达式定时执行任务
+- ✅ 多表关联生成：自动检测表关系，支持级联生成
+- ✅ 批量任务管理：批量创建、启动、停止、删除任务
+- ✅ 任务历史记录：记录任务执行历史
+- ✅ 数据质量检查：检查生成数据的质量
+- ✅ 数据回滚：支持回滚生成的数据
+- ✅ 性能监控：系统指标和任务性能监控
+- ✅ 连接池监控：连接池状态监控和配置建议
 
 ## 技术栈
 
@@ -24,6 +34,9 @@
 - pgx (PostgreSQL 驱动)
 - go-sql-driver/mysql (MySQL/MariaDB 驱动)
 - dm (达梦数据库驱动)
+- modernc.org/sqlite (SQLite 驱动，纯 Go 实现)
+- go-mssqldb (SQL Server 驱动)
+- godror (Oracle 驱动)
 
 ### 前端
 - Vue 3
@@ -31,6 +44,18 @@
 - Vite
 - Axios
 - Socket.io-client
+
+## 📚 文档
+
+- **[README.md](README.md)** - 项目主文档（当前文档）
+- **[BUILD.md](BUILD.md)** - 构建和部署说明
+- **[CHANGELOG.md](CHANGELOG.md)** - 变更日志
+- **[docs/TECHNICAL.md](docs/TECHNICAL.md)** - 技术文档（架构、API、数据库支持等）
+- **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** - 开发文档（优化历史、实现进度等）
+
+更多文档请查看 [docs/](docs/) 目录。
+
+---
 
 ## 项目结构
 
@@ -42,8 +67,30 @@ DBDataGenerator/
 │   ├── database/       # 数据库驱动层
 │   ├── generator/       # 数据生成引擎
 │   ├── task/           # 任务管理
-│   ├── api/            # REST API
-│   └── websocket/      # WebSocket 服务
+│   ├── api/            # REST API（已按功能模块拆分）
+│   │   ├── handler.go           # Handler 定义
+│   │   ├── handler_types.go     # 请求/响应类型
+│   │   ├── handler_connection.go    # 连接管理
+│   │   ├── handler_database.go      # 数据库操作
+│   │   ├── handler_task.go          # 任务管理
+│   │   ├── handler_template.go      # 模板管理
+│   │   ├── handler_preview.go       # 数据预览
+│   │   ├── handler_history.go       # 任务历史
+│   │   ├── handler_importexport.go  # 导入导出
+│   │   ├── handler_scheduler.go     # 定时任务
+│   │   ├── handler_relationship.go   # 表关系分析
+│   │   ├── handler_preset.go        # 预设模板
+│   │   ├── handler_additions.go     # 其他功能（质量检查、监控、回滚等）
+│   │   └── routes.go                # 路由定义
+│   ├── websocket/      # WebSocket 服务
+│   ├── quality/        # 数据质量检查
+│   ├── rollback/       # 数据回滚
+│   ├── scheduler/      # 定时任务调度
+│   ├── relationship/   # 表关系分析
+│   ├── monitor/        # 性能监控
+│   ├── poolmonitor/   # 连接池监控
+│   ├── importexport/  # 导入导出
+│   └── storage/        # 存储抽象（SQLite）
 ├── web/                # 前端代码
 ├── configs/           # 配置文件
 └── pkg/                # 公共包
@@ -97,13 +144,15 @@ npm run dev
 ### 1. 连接数据库
 
 在连接页面输入数据库连接信息：
-- 数据库类型：PostgreSQL / MySQL / MariaDB / 达梦数据库
-- 主机地址
-- 端口
-- 用户名和密码
-- 数据库名
+- **数据库类型**：PostgreSQL / MySQL / MariaDB / 达梦数据库 / SQLite / SQL Server / Oracle
+- **主机地址**（SQLite 不需要）
+- **端口**（SQLite 不需要）
+- **用户名和密码**（SQLite 不需要；SQL Server 支持 Windows 认证，用户名可留空）
+- **数据库名/文件路径**：
+  - SQLite: 数据库文件路径（如 `database.db` 或 `/path/to/database.db`）
+  - 其他: 数据库名
 
-点击"连接"按钮建立连接。
+点击"测试连接"确保连接成功，然后点击"保存"按钮保存连接。
 
 ### 2. 选择表
 
@@ -162,10 +211,16 @@ log:
 ## API 文档
 
 ### 连接管理
+- `POST /api/connect/test` - 测试数据库连接
 - `POST /api/connect` - 连接数据库
-- `POST /api/disconnect` - 断开连接
+- `PUT /api/connection/:id` - 更新连接配置
+- `GET /api/connections` - 获取所有连接
+- `GET /api/connection/active` - 获取活动连接
+- `POST /api/connection/:id/switch` - 切换活动连接
+- `DELETE /api/connection/:id` - 删除连接
 
 ### 数据库操作
+- `GET /api/databases` - 获取数据库列表
 - `GET /api/tables` - 获取表列表
 - `GET /api/table/:name/schema` - 获取表结构
 
@@ -177,7 +232,65 @@ log:
 - `POST /api/task/:id/pause` - 暂停任务
 - `POST /api/task/:id/resume` - 恢复任务
 - `POST /api/task/:id/stop` - 停止任务
+- `DELETE /api/task/:id` - 删除任务
 - `PUT /api/task/:id/threads` - 调整线程数
+- `POST /api/task/:id/clone` - 复制任务
+
+### 批量任务管理
+- `POST /api/tasks/batch/create` - 批量创建任务
+- `POST /api/tasks/batch/start` - 批量启动任务
+- `POST /api/tasks/batch/stop` - 批量停止任务
+- `POST /api/tasks/batch/delete` - 批量删除任务
+
+### 配置模板管理
+- `POST /api/template/save` - 保存模板
+- `GET /api/templates` - 获取所有模板
+- `GET /api/template/:id` - 获取模板详情
+- `DELETE /api/template/:id` - 删除模板
+
+### 预设模板
+- `GET /api/presets` - 获取预设模板列表
+- `GET /api/preset/:id` - 获取预设模板详情
+- `POST /api/preset/apply` - 应用预设模板
+
+### 数据预览
+- `POST /api/generator/preview` - 预览生成的数据
+
+### 任务历史
+- `GET /api/tasks/history` - 获取所有任务历史
+- `GET /api/task/:id/history` - 获取指定任务的历史
+- `DELETE /api/task/history/:id` - 删除历史记录
+
+### 数据导入导出
+- `GET /api/export/:connection_id/:database/:table` - 导出数据
+- `POST /api/import/:connection_id/:database/:table` - 导入数据
+
+### 定时任务
+- `POST /api/task/:id/schedule` - 设置定时任务
+- `GET /api/task/:id/schedule` - 获取定时任务配置
+- `GET /api/schedules` - 获取所有定时任务
+- `POST /api/task/:id/schedule/enable` - 启用定时任务
+- `POST /api/task/:id/schedule/disable` - 禁用定时任务
+- `DELETE /api/task/:id/schedule` - 删除定时任务
+
+### 表关系分析
+- `GET /api/relations` - 获取表关系图
+- `GET /api/table/:name/relations` - 获取单个表的关系
+- `POST /api/cascade/generate` - 级联生成数据
+
+### 数据质量检查
+- `GET /api/quality/check` - 检查数据质量
+
+### 性能监控
+- `GET /api/monitor/metrics` - 获取系统指标
+
+### 数据回滚
+- `POST /api/task/:id/rollback` - 回滚任务生成的数据
+- `POST /api/task/:id/rollback/partial` - 部分回滚（按数量或时间范围）
+- `GET /api/task/:id/rollback` - 获取回滚记录
+
+### 连接池管理
+- `GET /api/pool/status` - 获取连接池状态
 
 ### WebSocket
 - `WS /ws/task/:id` - 任务状态实时推送
@@ -198,10 +311,20 @@ log:
 - [x] 支持任务模板保存和加载
 - [x] 支持14种数据生成规则（覆盖 Navicat 主要功能）
 - [x] 支持字段类型智能过滤
-- [ ] 支持数据导入导出
-- [ ] 支持定时任务
+- [x] 支持更多数据库类型（SQLite、SQL Server、Oracle）
+- [x] 支持数据导入导出
+- [x] 支持定时任务
+- [x] 支持批量任务管理
+- [x] 支持任务历史记录
+- [x] 支持数据质量检查
+- [x] 支持数据回滚
+- [x] 支持任务复制
+- [x] 支持连接池监控
+- [x] 支持性能监控
+- [x] 支持预设模板库
 - [ ] 支持分布式生成
-- [ ] 支持更多数据库类型
+- [ ] 支持用户权限管理
+- [ ] 支持 API 文档（Swagger）
 
 ## 许可证
 

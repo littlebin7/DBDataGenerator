@@ -52,6 +52,13 @@ func (cm *ConnectionManagerSQLite) AddConnection(name string, config *Connection
 	connID := uuid.New().String()
 	now := time.Now().Unix()
 
+	// 加密密码
+	encryptedPassword, err := storage.EncryptPassword(config.Password)
+	if err != nil {
+		db.Disconnect()
+		return "", fmt.Errorf("加密密码失败: %w", err)
+	}
+
 	// 保存到 SQLite
 	query := `
 		INSERT INTO connections (id, name, type, host, port, user, password, database_name, ssl_mode, charset, is_active, created_at, updated_at)
@@ -59,7 +66,7 @@ func (cm *ConnectionManagerSQLite) AddConnection(name string, config *Connection
 	`
 	_, err = cm.storage.GetDB().Exec(query,
 		connID, name, config.Type, config.Host, config.Port, config.User,
-		config.Password, config.Database, config.SSLMode, config.Charset,
+		encryptedPassword, config.Database, config.SSLMode, config.Charset,
 		1, now, now,
 	)
 	if err != nil {
@@ -80,6 +87,73 @@ func (cm *ConnectionManagerSQLite) AddConnection(name string, config *Connection
 
 	cm.connections[connID] = connInfo
 	return connID, nil
+}
+
+// UpdateConnection 更新连接
+func (cm *ConnectionManagerSQLite) UpdateConnection(connID string, name string, config *ConnectionConfig) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	conn, exists := cm.connections[connID]
+	if !exists {
+		return fmt.Errorf("连接不存在: %s", connID)
+	}
+
+	// 如果连接正在使用，先断开
+	wasConnected := conn.Database != nil
+	if wasConnected {
+		conn.Database.Disconnect()
+		conn.Database = nil
+	}
+
+	// 创建新的数据库实例并测试连接
+	db, err := NewDatabase(config.Type)
+	if err != nil {
+		return fmt.Errorf("创建数据库实例失败: %w", err)
+	}
+
+	// 连接数据库
+	if err := db.Connect(config); err != nil {
+		return fmt.Errorf("连接数据库失败: %w", err)
+	}
+
+	// 测试连接
+	if err := db.TestConnection(); err != nil {
+		db.Disconnect()
+		return fmt.Errorf("连接测试失败: %w", err)
+	}
+
+	// 加密密码
+	encryptedPassword, err := storage.EncryptPassword(config.Password)
+	if err != nil {
+		db.Disconnect()
+		return fmt.Errorf("加密密码失败: %w", err)
+	}
+
+	// 更新数据库中的连接配置
+	now := time.Now().Unix()
+	query := `
+		UPDATE connections 
+		SET name = ?, type = ?, host = ?, port = ?, user = ?, password = ?, 
+		    database_name = ?, ssl_mode = ?, charset = ?, updated_at = ?
+		WHERE id = ?
+	`
+	_, err = cm.storage.GetDB().Exec(query,
+		name, config.Type, config.Host, config.Port, config.User,
+		encryptedPassword, config.Database, config.SSLMode, config.Charset,
+		now, connID,
+	)
+	if err != nil {
+		db.Disconnect()
+		return fmt.Errorf("更新连接配置失败: %w", err)
+	}
+
+	// 更新内存中的连接信息
+	conn.Name = name
+	conn.Config = config
+	conn.Database = db
+
+	return nil
 }
 
 // GetConnection 获取连接
@@ -197,17 +271,21 @@ func (cm *ConnectionManagerSQLite) LoadConnections() error {
 	for rows.Next() {
 		var connInfo ConnectionInfo
 		var config ConnectionConfig
+		var encryptedPassword string
 		var isActive int
 
 		err := rows.Scan(
 			&connInfo.ID, &connInfo.Name,
 			&config.Type, &config.Host, &config.Port, &config.User,
-			&config.Password, &config.Database, &config.SSLMode, &config.Charset,
+			&encryptedPassword, &config.Database, &config.SSLMode, &config.Charset,
 			&isActive,
 		)
 		if err != nil {
 			continue
 		}
+
+		// 解密密码
+		config.Password, _ = storage.DecryptPassword(encryptedPassword)
 
 		connInfo.Config = &config
 		connInfo.IsActive = isActive == 1

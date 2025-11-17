@@ -231,7 +231,7 @@ const loadConnections = async () => {
       loaded: false // 标记是否已加载
     }))
   } catch (error) {
-    ElMessage.error('加载连接列表失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error('加载连接列表失败: ' + (error.formattedMessage || error.message))
   } finally {
     loading.value = false
   }
@@ -277,7 +277,7 @@ const loadNode = async (node, resolve) => {
       
       resolve(databaseNodes)
     } catch (error) {
-      ElMessage.error('加载数据库列表失败: ' + (error.response?.data?.error || error.message))
+      ElMessage.error('加载数据库列表失败: ' + (error.formattedMessage || error.message))
       resolve([])
     }
   } 
@@ -310,7 +310,7 @@ const loadNode = async (node, resolve) => {
       
       resolve(tableNodes)
     } catch (error) {
-      ElMessage.error('加载表列表失败: ' + (error.response?.data?.error || error.message))
+      ElMessage.error('加载表列表失败: ' + (error.formattedMessage || error.message))
       resolve([])
     }
   } else {
@@ -345,7 +345,7 @@ const viewSchema = async () => {
     tableSchema.value = response
     showSchemaDialog.value = true
   } catch (error) {
-    ElMessage.error('获取表结构失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error('获取表结构失败: ' + (error.formattedMessage || error.message))
   }
 }
 

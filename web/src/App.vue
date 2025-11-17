@@ -39,10 +39,18 @@ const activeConnection = ref(null)
 const breadcrumbItems = computed(() => {
   const path = route.path
   const items = []
-  if (path === '/connection') items.push('连接管理')
+  if (path === '/connection') items.push('连接配置')
   else if (path === '/database-select') items.push('选择数据库')
-  else if (path === '/tasks') items.push('任务管理')
+  else if (path === '/tasks') items.push('任务列表')
   else if (path === '/task/config') items.push('配置造数规则')
+  else if (path === '/task-history') items.push('任务历史')
+  else if (path === '/monitor') items.push('系统监控')
+  else if (path === '/pool') items.push('连接池监控')
+  else if (path === '/quality') items.push('数据质量检查')
+  else if (path === '/schedule') items.push('定时任务管理')
+  else if (path === '/cascade') items.push('级联生成')
+  else if (path === '/template') items.push('模板管理')
+  else if (path === '/rollback') items.push('数据回滚')
   return items
 })
 

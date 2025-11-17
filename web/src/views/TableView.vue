@@ -111,7 +111,7 @@ const loadTables = async () => {
     const response = await api.getTables(selectedDatabase.value || '')
     tables.value = response.tables.map(name => ({ name }))
   } catch (error) {
-    ElMessage.error('获取表列表失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error('获取表列表失败: ' + (error.formattedMessage || error.message))
   } finally {
     loading.value = false
   }
@@ -128,7 +128,7 @@ const viewSchema = async (tableName) => {
     tableSchema.value = response
     showSchemaDialog.value = true
   } catch (error) {
-    ElMessage.error('获取表结构失败: ' + (error.response?.data?.error || error.message))
+    ElMessage.error('获取表结构失败: ' + (error.formattedMessage || error.message))
   }
 }
 

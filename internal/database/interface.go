@@ -2,7 +2,7 @@ package database
 
 // ConnectionConfig 数据库连接配置
 type ConnectionConfig struct {
-	Type     string // postgres/mysql/mariadb/dameng
+	Type     string // postgres/mysql/mariadb/dameng/sqlite/mssql/oracle
 	Host     string
 	Port     int
 	User     string
@@ -10,6 +10,9 @@ type ConnectionConfig struct {
 	Database string
 	SSLMode  string // PostgreSQL 使用
 	Charset  string // MySQL/MariaDB 使用
+	// SQLite: Database 字段作为文件路径
+	// SQL Server: 支持 Windows 认证（Integrated Security）
+	// Oracle: 支持 TNS 连接字符串
 }
 
 // Database 数据库操作接口
@@ -37,6 +40,21 @@ type Database interface {
 
 	// 获取关联表数据（用于外键）
 	GetForeignTableData(database, table, field string, limit int) ([]interface{}, error)
+
+	// 查询表数据（用于导出）
+	QueryTableData(database, table string, limit, offset int) ([]map[string]interface{}, error)
+
+	// 获取表数据总数
+	GetTableCount(database, table string) (int64, error)
+
+	// ExecuteQuery 执行 SQL 查询并返回单个 int64 值（用于质量检查等场景）
+	ExecuteQuery(database, query string, args ...interface{}) (int64, error)
+
+	// GetDBType 获取数据库类型（用于构建特定数据库的 SQL）
+	GetDBType() string
+
+	// ExecuteNonQuery 执行非查询 SQL（INSERT/UPDATE/DELETE）并返回受影响的行数
+	ExecuteNonQuery(database, query string, args ...interface{}) (int64, error)
 }
 
 // TableSchema 表结构

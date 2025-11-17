@@ -46,4 +46,6 @@ data/
 web/node_modules
 web/dist
 dist
-dist-all
+#dist-all
+
+.cursor

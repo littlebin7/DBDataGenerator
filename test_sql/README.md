@@ -7,6 +7,7 @@
 - `postgres_test_tables.sql` - PostgreSQL 测试表
 - `mysql_test_tables.sql` - MySQL/MariaDB 测试表
 - `dameng_test_tables.sql` - 达梦数据库测试表
+- `sqlite_test_tables.sql` - SQLite 测试表
 
 ## 使用方法
 
@@ -35,6 +36,17 @@ source mysql_test_tables.sql;
 ### 达梦数据库
 
 在达梦数据库管理工具中执行 `dameng_test_tables.sql` 文件内容。
+
+### SQLite
+
+```bash
+sqlite3 test.db < sqlite_test_tables.sql
+```
+
+或在 SQLite 命令行中执行：
+```sql
+.read sqlite_test_tables.sql
+```
 
 ## 表结构说明
 

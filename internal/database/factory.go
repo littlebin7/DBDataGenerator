@@ -15,6 +15,12 @@ func NewDatabase(dbType string) (Database, error) {
 		return NewMySQLDB(), nil // MariaDB 使用 MySQL 驱动
 	case "dameng":
 		return NewDamengDB(), nil
+	case "sqlite", "sqlite3":
+		return NewSQLiteDB(), nil
+	case "mssql", "sqlserver":
+		return NewSQLServerDB(), nil
+	case "oracle":
+		return NewOracleDB(), nil
 	default:
 		return nil, fmt.Errorf("不支持的数据库类型: %s", dbType)
 	}

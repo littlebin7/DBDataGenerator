@@ -223,6 +223,86 @@ func (db *MySQLDB) GetForeignTableData(database, table, field string, limit int)
 	return values, nil
 }
 
+func (db *MySQLDB) QueryTableData(database, table string, limit, offset int) ([]map[string]interface{}, error) {
+	query := fmt.Sprintf("SELECT * FROM `%s` LIMIT ? OFFSET ?", table)
+	rows, err := db.db.Query(query, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("查询数据失败: %w", err)
+	}
+	defer rows.Close()
+
+	// 获取列名
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, fmt.Errorf("获取列名失败: %w", err)
+	}
+
+	var results []map[string]interface{}
+	for rows.Next() {
+		values := make([]interface{}, len(columns))
+		valuePtrs := make([]interface{}, len(columns))
+		for i := range values {
+			valuePtrs[i] = &values[i]
+		}
+
+		if err := rows.Scan(valuePtrs...); err != nil {
+			return nil, fmt.Errorf("扫描数据失败: %w", err)
+		}
+
+		row := make(map[string]interface{})
+		for i, col := range columns {
+			val := values[i]
+			// 处理[]byte类型
+			if b, ok := val.([]byte); ok {
+				row[col] = string(b)
+			} else {
+				row[col] = val
+			}
+		}
+		results = append(results, row)
+	}
+
+	return results, nil
+}
+
+func (db *MySQLDB) GetTableCount(database, table string) (int64, error) {
+	query := fmt.Sprintf("SELECT COUNT(*) FROM `%s`", table)
+	var count int64
+	err := db.db.QueryRow(query).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("查询数据总数失败: %w", err)
+	}
+	return count, nil
+}
+
+func (db *MySQLDB) ExecuteQuery(database, query string, args ...interface{}) (int64, error) {
+	var count int64
+	err := db.db.QueryRow(query, args...).Scan(&count)
+	if err != nil {
+		return 0, fmt.Errorf("执行查询失败: %w", err)
+	}
+	return count, nil
+}
+
+func (db *MySQLDB) GetDBType() string {
+	if db.config != nil && db.config.Type == "mariadb" {
+		return "mariadb"
+	}
+	return "mysql"
+}
+
+func (db *MySQLDB) ExecuteNonQuery(database, query string, args ...interface{}) (int64, error) {
+	result, err := db.db.Exec(query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("执行非查询 SQL 失败: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return 0, fmt.Errorf("获取受影响行数失败: %w", err)
+	}
+	return rowsAffected, nil
+}
+
 func (db *MySQLDB) parseMySQLType(field *FieldInfo, dbType string) {
 	// 解析 VARCHAR(255) 格式
 	if idx := strings.Index(dbType, "("); idx != -1 {

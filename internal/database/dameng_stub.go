@@ -47,3 +47,23 @@ func (db *DamengDB) BatchInsert(database, table string, rows []map[string]interf
 func (db *DamengDB) GetForeignTableData(database, table, field string, limit int) ([]interface{}, error) {
 	return nil, fmt.Errorf("达梦数据库在此平台不支持")
 }
+
+func (db *DamengDB) QueryTableData(database, table string, limit, offset int) ([]map[string]interface{}, error) {
+	return nil, fmt.Errorf("达梦数据库在此平台不支持")
+}
+
+func (db *DamengDB) GetTableCount(database, table string) (int64, error) {
+	return 0, fmt.Errorf("达梦数据库在此平台不支持")
+}
+
+func (db *DamengDB) ExecuteQuery(database, query string, args ...interface{}) (int64, error) {
+	return 0, fmt.Errorf("达梦数据库在此平台不支持")
+}
+
+func (db *DamengDB) GetDBType() string {
+	return "dameng"
+}
+
+func (db *DamengDB) ExecuteNonQuery(database, query string, args ...interface{}) (int64, error) {
+	return 0, fmt.Errorf("达梦数据库在此平台不支持")
+}
