@@ -39,8 +39,9 @@ type ConnectionManagerInterface interface {
 	Reconnect(connID string) error
 }
 
-// NewConnectionManagerFile 创建连接管理器（文件方式，已废弃）
-func NewConnectionManagerFile(configFile string) *ConnectionManager {
+// NewConnectionManagerFileOld 创建连接管理器（文件方式，已废弃，保留用于向后兼容）
+// 注意：新的实现请使用 connection_manager_file.go 中的 NewConnectionManagerFile
+func NewConnectionManagerFileOld(configFile string) *ConnectionManager {
 	cm := &ConnectionManager{
 		connections: make(map[string]*ConnectionInfo),
 		configFile:  configFile,

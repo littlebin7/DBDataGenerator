@@ -21,8 +21,9 @@
 **前端：**
 - Vue 3 + Composition API
 - Element Plus UI 组件库
+- Pinia 状态管理
 - Axios（HTTP 请求）
-- Socket.io-client（WebSocket 客户端）
+- WebSocket 实时通信
 
 **其他：**
 - viper（配置管理）

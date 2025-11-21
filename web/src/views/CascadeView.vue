@@ -103,6 +103,9 @@ import { ref, computed } from 'vue'
 import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
+import { useConnectionStore } from '../stores/connection'
+
+const connectionStore = useConnectionStore()
 
 const analyzing = ref(false)
 const generating = ref(false)
@@ -123,8 +126,8 @@ const canAnalyze = computed(() => {
 
 const loadConnections = async () => {
   try {
-    const data = await api.getConnections()
-    connections.value = data.connections || []
+    await connectionStore.loadConnections()
+    connections.value = connectionStore.allConnections
   } catch (error) {
     console.error('获取连接列表失败:', error)
   }

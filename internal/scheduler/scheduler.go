@@ -57,8 +57,9 @@ func (s *Scheduler) AddSchedule(taskID, cronExpr string) (*ScheduledTask, error)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// 验证cron表达式
-	if _, err := cron.ParseStandard(cronExpr); err != nil {
+	// 验证cron表达式（支持秒级精度，6字段格式）
+	parser := cron.NewParser(cron.Second | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+	if _, err := parser.Parse(cronExpr); err != nil {
 		return nil, fmt.Errorf("无效的cron表达式: %w", err)
 	}
 

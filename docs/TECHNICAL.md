@@ -6,8 +6,10 @@
 
 - [技术架构](#技术架构)
 - [数据库支持](#数据库支持)
+- [存储系统](#存储系统)
 - [数据生成规则](#数据生成规则)
 - [API 文档](#api-文档)
+- [状态管理](#状态管理)
 - [WebSocket 实时更新](#websocket-实时更新)
 - [前后端兼容性](#前后端兼容性)
 
@@ -64,6 +66,95 @@
 - 数据库名
 - SSL 模式（PostgreSQL）
 - 字符集（MySQL）
+
+---
+
+## 存储系统
+
+系统支持多种存储后端，用于保存连接配置、模板数据和任务历史记录。
+
+### 支持的存储类型
+
+1. **文件存储 (file)**
+   - 使用 JSON 文件存储连接配置和模板
+   - 适合单机部署和开发环境
+   - 无需额外数据库服务
+
+2. **SQLite (sqlite)** - 默认
+   - 轻量级嵌入式数据库
+   - 适合小型项目和个人使用
+   - 使用 `modernc.org/sqlite`（PureGo 实现）
+
+3. **MySQL/MariaDB (mysql/mariadb)**
+   - 适合生产环境
+   - 支持高并发访问
+   - 支持 DSN 或单独配置项
+
+4. **PostgreSQL (postgres/postgresql)**
+   - 功能强大的关系型数据库
+   - 适合企业级应用
+   - 支持 DSN 或单独配置项
+
+### 存储配置
+
+在 `configs/config.yaml` 中配置：
+
+```yaml
+storage:
+  type: sqlite  # file, sqlite, mysql, mariadb, postgres, postgresql
+  
+  # 文件存储配置
+  connections_file: ./data/connections.json
+  templates_file: ./data/templates.json
+  
+  # SQLite 配置
+  sqlite_path: ./data/app.db
+  
+  # MySQL/MariaDB 配置（二选一）
+  mysql_dsn: user:password@tcp(host:port)/dbname?charset=utf8mb4&parseTime=True&loc=Local
+  # 或使用单独配置项
+  # mysql_host: localhost
+  # mysql_port: 3306
+  # mysql_user: root
+  # mysql_password: password
+  # mysql_database: dbdatagenerator
+  
+  # PostgreSQL 配置（二选一）
+  postgres_dsn: postgres://user:password@host:port/dbname?sslmode=disable
+  # 或使用单独配置项
+  # postgres_host: localhost
+  # postgres_port: 5432
+  # postgres_user: postgres
+  # postgres_password: password
+  # postgres_database: dbdatagenerator
+```
+
+### 存储架构
+
+系统采用接口抽象设计，通过 `StorageInterface` 统一不同存储后端的操作：
+
+- **接口定义**：`internal/storage/interface.go`
+- **工厂模式**：`internal/storage/factory.go` 根据配置创建对应存储实例
+- **实现类**：
+  - `FileStorage` - 文件存储实现
+  - `Storage` (SQLite) - SQLite 存储实现
+  - `MySQLStorage` - MySQL/MariaDB 存储实现
+  - `PostgresStorage` - PostgreSQL 存储实现
+
+### 数据迁移
+
+系统支持从文件存储迁移到数据库存储：
+- 自动检测现有 JSON 文件
+- 迁移连接配置和模板数据
+- 保留原有数据完整性
+
+### 存储内容
+
+存储系统管理以下数据：
+- **连接配置**：数据库连接信息（加密存储）
+- **模板数据**：任务配置模板
+- **任务历史**：任务执行历史记录（仅数据库存储）
+- **回滚记录**：数据回滚记录（仅数据库存储）
 
 ---
 
@@ -255,6 +346,62 @@ ws://host:port/ws/task/{task_id}?task_id={task_id}
 4. **连接管理** - 前端自动重连机制（指数退避）
 
 WebSocket 优化详情已整合到本文档。
+
+---
+
+## 状态管理
+
+项目使用 **Pinia** 作为状态管理库，实现了统一的状态管理和数据共享。
+
+### Store 结构
+
+项目包含三个主要的 Store：
+
+1. **ConnectionStore** (`web/src/stores/connection.js`)
+   - 管理数据库连接配置
+   - 管理活动连接状态
+   - 提供连接 CRUD 操作
+
+2. **TaskStore** (`web/src/stores/task.js`)
+   - 管理任务列表和状态
+   - 提供任务操作（启动、暂停、停止等）
+   - 支持 WebSocket 实时更新
+
+3. **TemplateStore** (`web/src/stores/template.js`)
+   - 管理配置模板
+   - 提供模板 CRUD 操作
+
+### Store 使用
+
+所有组件通过 `useStore()` 函数访问 store：
+
+```javascript
+import { useConnectionStore } from '@/stores/connection'
+import { useTaskStore } from '@/stores/task'
+import { useTemplateStore } from '@/stores/template'
+
+const connectionStore = useConnectionStore()
+const taskStore = useTaskStore()
+const templateStore = useTemplateStore()
+
+// 使用 computed 获取响应式数据
+const connections = computed(() => connectionStore.allConnections)
+const activeConnection = computed(() => connectionStore.currentConnection)
+
+// 调用 actions
+await connectionStore.loadConnections()
+await taskStore.loadTasks()
+```
+
+### 状态共享
+
+- **连接状态**：所有组件共享同一连接列表和活动连接
+- **任务状态**：任务列表在所有组件间同步，WebSocket 更新自动同步
+- **模板数据**：模板列表在多个组件间共享
+
+### WebSocket 集成
+
+任务状态通过 WebSocket 实时更新，更新通过 `taskStore.updateTask()` 同步到 store，所有使用该 store 的组件自动获得更新。
 
 ---
 

@@ -27,8 +27,12 @@ func (h *Handler) GetPresetTemplate(c *gin.Context) {
 	presetMgr := generator.NewPresetTemplateManager()
 	preset, err := presetMgr.GetPreset(presetID)
 	if err != nil || preset == nil {
+		errMsg := ""
+		if err != nil {
+			errMsg = err.Error()
+		}
 		h.logger.Warn("获取预设模板失败", zap.String("preset_id", presetID))
-		h.sendError(c, http.StatusNotFound, ErrCodeNotFound, "预设模板不存在", err.Error())
+		h.sendError(c, http.StatusNotFound, ErrCodeNotFound, "预设模板不存在", errMsg)
 		return
 	}
 
@@ -50,12 +54,24 @@ func (h *Handler) ApplyPresetTemplate(c *gin.Context) {
 		return
 	}
 
+	// 验证连接是否存在
+	_, err := h.connMgr.GetConnection(req.ConnectionID)
+	if err != nil {
+		h.logger.Warn("连接不存在", zap.String("connection_id", req.ConnectionID), zap.Error(err))
+		h.sendError(c, http.StatusNotFound, ErrCodeNotFound, "连接不存在", err.Error())
+		return
+	}
+
 	// 获取预设模板
 	presetMgr := generator.NewPresetTemplateManager()
 	preset, err := presetMgr.GetPreset(req.PresetID)
 	if err != nil || preset == nil {
 		h.logger.Warn("获取预设模板失败", zap.String("preset_id", req.PresetID))
-		h.sendError(c, http.StatusNotFound, ErrCodeNotFound, "预设模板不存在", err.Error())
+		errMsg := ""
+		if err != nil {
+			errMsg = err.Error()
+		}
+		h.sendError(c, http.StatusNotFound, ErrCodeNotFound, "预设模板不存在", errMsg)
 		return
 	}
 

@@ -173,6 +173,9 @@ import {
   Edit
 } from '@element-plus/icons-vue'
 import api from '../api'
+import { useConnectionStore } from '../stores/connection'
+
+const connectionStore = useConnectionStore()
 
 const router = useRouter()
 
@@ -215,8 +218,8 @@ const handleFilter = () => {
 const loadConnections = async () => {
   loading.value = true
   try {
-    const connectionsRes = await api.getConnections()
-    const connections = connectionsRes.connections || []
+    await connectionStore.loadConnections()
+    const connections = connectionStore.allConnections
     
     treeData.value = connections.map(conn => ({
       id: `conn-${conn.id}`,

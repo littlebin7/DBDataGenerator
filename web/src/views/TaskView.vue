@@ -171,16 +171,19 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, onUnmounted } from 'vue'
+import { ref, onMounted, computed, onUnmounted, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search, Connection, CircleCheck, Loading } from '@element-plus/icons-vue'
 import api from '../api'
 import { formatTime, formatDuration, formatSpeed } from '../utils/formatters'
 import { TASK_STATUS_TYPE, TASK_STATUS_TEXT, WS_CONNECTION_STATUS, WS_CONNECTION_STATUS_TEXT, WS_CONNECTION_STATUS_COLOR, RECONNECT_CONFIG } from '../utils/constants'
 import StatusTag from '../components/StatusTag.vue'
+import { useTaskStore } from '../stores/task'
 
-const tasks = ref([])
-const loading = ref(false)
+const taskStore = useTaskStore()
+
+const tasks = computed(() => taskStore.allTasks)
+const loading = computed(() => taskStore.loading)
 const searchText = ref('')
 const statusFilter = ref('')
 const showDetailDialog = ref(false)
@@ -207,15 +210,44 @@ const filteredTasks = computed(() => {
   return result
 })
 
+// 监听 store 中的任务变化，更新 WebSocket 连接
+watch(() => taskStore.allTasks, (newTasks) => {
+  newTasks.forEach(task => {
+    if ((task.status === 'running' || task.status === 'paused')) {
+      const existingWs = wsConnections.get(task.id)
+      // 如果连接不存在或已关闭，建立新连接
+      if (!existingWs || existingWs.readyState !== WebSocket.OPEN) {
+        connectWebSocket(task.id)
+      }
+    } else {
+      // 任务已停止，关闭WebSocket连接
+      const ws = wsConnections.get(task.id)
+      if (ws) {
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close()
+        }
+        wsConnections.delete(task.id)
+      }
+      // 清除重连定时器
+      if (reconnectTimers.has(task.id)) {
+        clearTimeout(reconnectTimers.get(task.id))
+        reconnectTimers.delete(task.id)
+      }
+      // 更新连接状态
+      wsConnectionStatus.value.set(task.id, 'disconnected')
+    }
+  })
+}, { deep: true })
+
 onMounted(async () => {
-  await loadTasks()
+  await taskStore.loadTasks()
   // 为运行中的任务建立WebSocket连接
   setupWebSocketConnections()
   // 保留轮询作为后备（每10秒刷新一次，仅用于非运行中的任务）
   refreshTimer = setInterval(() => {
     const hasNonRunning = tasks.value.some(t => t.status !== 'running' && t.status !== 'paused')
     if (hasNonRunning) {
-      loadTasks()
+      taskStore.loadTasks()
     }
   }, 10000) // 每10秒刷新一次（仅用于非运行中的任务）
 })
@@ -283,12 +315,8 @@ const connectWebSocket = (taskId, reconnectAttempt = 0) => {
       try {
         const data = JSON.parse(event.data)
         if (data.type === 'task_update' && data.task) {
-          // 更新任务状态
-          const index = tasks.value.findIndex(t => t.id === data.task.id)
-          if (index !== -1) {
-            // 更新任务数据，保持响应式
-            Object.assign(tasks.value[index], data.task)
-          }
+          // 使用 store 更新任务状态
+          taskStore.updateTask(data.task)
         }
       } catch (error) {
         console.error('解析WebSocket消息失败:', error)
@@ -345,44 +373,10 @@ const connectWebSocket = (taskId, reconnectAttempt = 0) => {
 }
 
 const loadTasks = async () => {
-  loading.value = true
   try {
-    const response = await api.getTasks()
-    const newTasks = response.tasks || []
-    
-    // 更新任务列表
-    tasks.value = newTasks
-    
-    // 为新的运行中任务建立WebSocket连接
-    newTasks.forEach(task => {
-      if ((task.status === 'running' || task.status === 'paused')) {
-        const existingWs = wsConnections.get(task.id)
-        // 如果连接不存在或已关闭，建立新连接
-        if (!existingWs || existingWs.readyState !== WebSocket.OPEN) {
-          connectWebSocket(task.id)
-        }
-      } else {
-        // 任务已停止，关闭WebSocket连接
-        const ws = wsConnections.get(task.id)
-        if (ws) {
-          if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
-            ws.close()
-          }
-          wsConnections.delete(task.id)
-        }
-        // 清除重连定时器
-        if (reconnectTimers.has(task.id)) {
-          clearTimeout(reconnectTimers.get(task.id))
-          reconnectTimers.delete(task.id)
-        }
-        // 更新连接状态
-        wsConnectionStatus.value.set(task.id, 'disconnected')
-      }
-    })
+    await taskStore.loadTasks()
   } catch (error) {
     ElMessage.error('获取任务列表失败: ' + (error.formattedMessage || error.message))
-  } finally {
-    loading.value = false
   }
 }
 
@@ -419,9 +413,8 @@ const getConnectionStatusText = (taskId) => {
 
 const startTask = async (taskId) => {
   try {
-    await api.startTask(taskId)
+    await taskStore.startTask(taskId)
     ElMessage.success('任务已启动')
-    await loadTasks()
   } catch (error) {
     ElMessage.error('启动任务失败: ' + (error.formattedMessage || error.message))
   }
@@ -429,9 +422,8 @@ const startTask = async (taskId) => {
 
 const pauseTask = async (taskId) => {
   try {
-    await api.pauseTask(taskId)
+    await taskStore.pauseTask(taskId)
     ElMessage.success('任务已暂停')
-    await loadTasks()
   } catch (error) {
     ElMessage.error('暂停任务失败: ' + (error.formattedMessage || error.message))
   }
@@ -439,9 +431,8 @@ const pauseTask = async (taskId) => {
 
 const resumeTask = async (taskId) => {
   try {
-    await api.resumeTask(taskId)
+    await taskStore.resumeTask(taskId)
     ElMessage.success('任务已恢复')
-    await loadTasks()
   } catch (error) {
     ElMessage.error('恢复任务失败: ' + (error.formattedMessage || error.message))
   }
@@ -454,9 +445,8 @@ const stopTask = async (taskId) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    await api.stopTask(taskId)
+    await taskStore.stopTask(taskId)
     ElMessage.success('任务已停止')
-    await loadTasks()
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('停止任务失败: ' + (error.formattedMessage || error.message))
@@ -466,11 +456,11 @@ const stopTask = async (taskId) => {
 
 const updateThreadCount = async (taskId, count) => {
   try {
-    await api.setThreadCount(taskId, count)
+    await taskStore.setThreadCount(taskId, count)
     ElMessage.success('线程数已更新')
   } catch (error) {
     ElMessage.error('更新线程数失败: ' + (error.formattedMessage || error.message))
-    await loadTasks() // 恢复原值
+    await taskStore.loadTasks() // 恢复原值
   }
 }
 
@@ -486,9 +476,8 @@ const deleteTask = async (taskId) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    await api.deleteTask(taskId)
+    await taskStore.deleteTask(taskId)
     ElMessage.success('任务已删除')
-    await loadTasks()
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除任务失败: ' + (error.formattedMessage || error.message))

@@ -41,32 +41,81 @@ func main() {
 	// 创建路由
 	router := gin.New()
 	router.Use(gin.Logger(), gin.Recovery())
+	// CORS 已在 api.SetupRoutes 中配置
 
-	// 使用 SQLite 存储（纯 Go 实现，无需 CGO）
-	// 连接配置和模板配置保存在 data/app.db
-	storageInstance, err := storage.NewStorage("./data/app.db")
+	// 根据配置创建存储实例
+	storageCfg := storage.ConvertConfig(cfg.Storage)
+	storageInstance, err := storage.NewStorage(storageCfg)
 	if err != nil {
 		logger.Fatal("初始化存储失败", zap.Error(err))
 	}
 	defer storageInstance.Close()
 
-	// 尝试从 JSON 文件迁移数据（如果存在）
-	if err := storage.MigrateFromJSON(storageInstance, "./connections.json", "./templates.json"); err != nil {
-		logger.Warn("数据迁移失败（可能是首次运行）", zap.Error(err))
+	logger.Info("存储初始化成功", zap.String("type", storageInstance.Type()))
+
+	// 尝试从 JSON 文件迁移数据（如果存在且不是文件存储）
+	if storageInstance.Type() != "file" {
+		if dbStorage, ok := storageInstance.(*storage.Storage); ok {
+			if err := storage.MigrateFromJSON(dbStorage, "./connections.json", "./templates.json"); err != nil {
+				logger.Warn("数据迁移失败（可能是首次运行）", zap.Error(err))
+			} else {
+				logger.Info("数据迁移完成（如果存在旧数据）")
+			}
+		}
+	}
+
+	// 根据存储类型创建连接管理器和模板管理器
+	var connMgr database.ConnectionManagerInterface
+	var templateMgr generator.TemplateManagerInterface
+
+	if storageInstance.Type() == "file" {
+		// 文件存储
+		fileStorage := storageInstance.(*storage.FileStorage)
+		connMgr, err = database.NewConnectionManagerFile(fileStorage)
+		if err != nil {
+			logger.Fatal("初始化连接管理器失败", zap.Error(err))
+		}
+
+		templateMgr, err = generator.NewTemplateManagerFile(fileStorage)
+		if err != nil {
+			logger.Fatal("初始化模板管理器失败", zap.Error(err))
+		}
 	} else {
-		logger.Info("数据迁移完成（如果存在旧数据）")
-	}
+		// 数据库存储（SQLite/MySQL/PostgreSQL）
+		// 需要转换为 *storage.Storage 类型（或其他数据库存储类型）
+		if sqliteStorage, ok := storageInstance.(*storage.Storage); ok {
+			connMgr, err = database.NewConnectionManagerSQLite(sqliteStorage)
+			if err != nil {
+				logger.Fatal("初始化连接管理器失败", zap.Error(err))
+			}
 
-	// 创建连接管理器（SQLite）
-	connMgr, err := database.NewConnectionManagerSQLite(storageInstance)
-	if err != nil {
-		logger.Fatal("初始化连接管理器失败", zap.Error(err))
-	}
+			templateMgr, err = generator.NewTemplateManagerSQLite(sqliteStorage)
+			if err != nil {
+				logger.Fatal("初始化模板管理器失败", zap.Error(err))
+			}
+		} else if mysqlStorage, ok := storageInstance.(*storage.MySQLStorage); ok {
+			connMgr, err = database.NewConnectionManagerDB(mysqlStorage)
+			if err != nil {
+				logger.Fatal("初始化连接管理器失败", zap.Error(err))
+			}
 
-	// 创建模板管理器（SQLite）
-	templateMgr, err := generator.NewTemplateManagerSQLite(storageInstance)
-	if err != nil {
-		logger.Fatal("初始化模板管理器失败", zap.Error(err))
+			templateMgr, err = generator.NewTemplateManagerDB(mysqlStorage)
+			if err != nil {
+				logger.Fatal("初始化模板管理器失败", zap.Error(err))
+			}
+		} else if postgresStorage, ok := storageInstance.(*storage.PostgresStorage); ok {
+			connMgr, err = database.NewConnectionManagerDB(postgresStorage)
+			if err != nil {
+				logger.Fatal("初始化连接管理器失败", zap.Error(err))
+			}
+
+			templateMgr, err = generator.NewTemplateManagerDB(postgresStorage)
+			if err != nil {
+				logger.Fatal("初始化模板管理器失败", zap.Error(err))
+			}
+		} else {
+			logger.Fatal("不支持的存储类型", zap.String("type", storageInstance.Type()))
+		}
 	}
 
 	// 初始化 WebSocket Hub

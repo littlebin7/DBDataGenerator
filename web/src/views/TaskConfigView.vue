@@ -472,6 +472,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Search } from '@element-plus/icons-vue'
 import api from '../api'
+import { useTemplateStore } from '../stores/template'
+
+const templateStore = useTemplateStore()
 
 const route = useRoute()
 const router = useRouter()
@@ -873,8 +876,8 @@ const closePreview = () => {
 
 const loadTemplates = async () => {
   try {
-    const response = await api.getTemplates(tableName.value)
-    templates.value = response.templates || []
+    await templateStore.loadTemplates(tableName.value)
+    templates.value = templateStore.allTemplates
   } catch (error) {
     console.error('加载模板列表失败:', error)
   }

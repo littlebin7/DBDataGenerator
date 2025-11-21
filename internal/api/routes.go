@@ -1,12 +1,25 @@
 package api
 
 import (
+	"time"
+
 	"github.com/gin-gonic/gin"
 )
 
 // SetupRoutes 设置路由
 func SetupRoutes(router *gin.Engine, handler *Handler) {
+	// 添加 CORS 中间件
+	router.Use(CORSMiddleware())
+
+	// 添加审计日志中间件
+	router.Use(AuditMiddleware(handler.logger))
+
+	// 创建频率限制器（每分钟 100 个请求）
+	rateLimiter := NewRateLimiter(100, time.Minute, handler.logger)
+
 	api := router.Group("/api")
+	// 对 API 路由应用频率限制（排除 WebSocket 升级）
+	api.Use(rateLimiter.Limit())
 	{
 		// 连接管理
 		api.POST("/connect/test", handler.TestConnection)

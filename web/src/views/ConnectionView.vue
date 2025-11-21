@@ -154,16 +154,20 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
+import { useConnectionStore } from '../stores/connection'
 
 const router = useRouter()
-const connections = ref([])
+const connectionStore = useConnectionStore()
+
+const connections = computed(() => connectionStore.allConnections)
+const loading = computed(() => connectionStore.loading)
+
 const showDialog = ref(false)
 const showAddDialog = ref(false)
-const loading = ref(false)
 const saving = ref(false)
 const testing = ref(false)
 const connectionTested = ref(false)
@@ -183,7 +187,7 @@ const form = ref({
 })
 
 onMounted(async () => {
-  await loadConnections()
+  await connectionStore.loadConnections()
 })
 
 // 数据库类型切换时的处理
@@ -213,19 +217,6 @@ const onTypeChange = (type) => {
   connectionTested.value = false
 }
 
-const loadConnections = async () => {
-  loading.value = true
-  try {
-    const response = await api.getConnections()
-    connections.value = response.connections || []
-    console.log('加载的连接列表:', connections.value)
-  } catch (error) {
-    console.error('加载连接列表失败:', error)
-    ElMessage.error('加载连接列表失败: ' + (error.formattedMessage || error.message))
-  } finally {
-    loading.value = false
-  }
-}
 
 // 测试连接（保存前）
 const testConnectionBeforeSave = async () => {
@@ -292,19 +283,17 @@ const saveConnection = async () => {
   try {
     if (editingConnection.value) {
       // 编辑连接
-      await api.updateConnection(editingConnection.value.id, form.value)
+      await connectionStore.updateConnection(editingConnection.value.id, form.value)
       ElMessage.success('连接更新成功')
       showDialog.value = false
       resetForm()
       editingConnection.value = null
-      await loadConnections()
     } else {
       // 新建连接
-      const response = await api.connect(form.value)
+      await connectionStore.addConnection(form.value)
       ElMessage.success('连接保存成功')
       showDialog.value = false
       resetForm()
-      await loadConnections()
     }
   } catch (error) {
     ElMessage.error('保存失败: ' + (error.formattedMessage || error.message))
@@ -364,9 +353,8 @@ const reconnect = async (connId) => {
 
 const switchConnection = async (connId) => {
   try {
-    await api.switchConnection(connId)
+    await connectionStore.switchConnection(connId)
     ElMessage.success('已切换连接')
-    await loadConnections()
   } catch (error) {
     ElMessage.error('切换失败: ' + (error.formattedMessage || error.message))
   }
@@ -379,9 +367,8 @@ const removeConnection = async (connId) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    await api.disconnect(connId)
+    await connectionStore.removeConnection(connId)
     ElMessage.success('已删除连接')
-    await loadConnections()
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败: ' + (error.formattedMessage || error.message))

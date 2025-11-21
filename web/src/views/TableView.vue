@@ -95,7 +95,8 @@ onMounted(async () => {
 
 const loadDatabases = async () => {
   try {
-    const activeConn = await api.getActiveConnection()
+    await connectionStore.loadActiveConnection()
+    const activeConn = connectionStore.currentConnection
     if (activeConn && activeConn.id && activeConn.config?.database) {
       selectedDatabase.value = activeConn.config.database
       databases.value = [activeConn.config.database]
@@ -119,7 +120,7 @@ const loadTables = async () => {
 
 const viewSchema = async (tableName) => {
   try {
-    const activeConn = await api.getActiveConnection()
+    const activeConn = connectionStore.currentConnection
     const response = await api.getTableSchema(
       selectedDatabase.value || activeConn?.config?.database || '',
       tableName,
@@ -133,16 +134,17 @@ const viewSchema = async (tableName) => {
 }
 
 const createTask = (tableName) => {
-  api.getActiveConnection().then(res => {
+  const activeConn = connectionStore.currentConnection
+  if (activeConn) {
     router.push({ 
       name: 'TaskConfig', 
       query: { 
         table: tableName,
-        connection_id: res.id,
-        database: selectedDatabase.value || res.config?.database || ''
+        connection_id: activeConn.id,
+        database: selectedDatabase.value || activeConn.config?.database || ''
       } 
     })
-  }).catch(() => {
+  } else {
     router.push({ 
       name: 'TaskConfig', 
       query: { 
@@ -150,6 +152,6 @@ const createTask = (tableName) => {
         database: selectedDatabase.value || ''
       } 
     })
-  })
+  }
 }
 </script>

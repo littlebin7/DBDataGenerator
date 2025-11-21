@@ -15,8 +15,18 @@ type Storage struct {
 	mu sync.RWMutex
 }
 
-// NewStorage 创建存储管理器
-func NewStorage(dbPath string) (*Storage, error) {
+// Type 返回存储类型
+func (s *Storage) Type() string {
+	return "sqlite"
+}
+
+// InitTables 初始化表结构（公开方法）
+func (s *Storage) InitTables() error {
+	return s.initTables()
+}
+
+// NewSQLiteStorage 创建 SQLite 存储管理器
+func NewSQLiteStorage(dbPath string) (*Storage, error) {
 	// 确保目录存在
 	if err := os.MkdirAll("./data", 0755); err != nil {
 		return nil, fmt.Errorf("创建数据目录失败: %w", err)

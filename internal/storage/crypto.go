@@ -13,26 +13,49 @@ import (
 var (
 	// 默认加密密钥（32字节，AES-256）
 	// 生产环境应该从环境变量或配置文件读取
-	defaultKey = []byte("DBDataGenerator2024SecretKey32Bytes!!")
+	defaultKey = []byte("DBDataGenerator2024SecretKey32!!")
 )
 
 // getEncryptionKey 获取加密密钥
+// AES 密钥必须是 16、24 或 32 字节（对应 AES-128、AES-192、AES-256）
 func getEncryptionKey() []byte {
 	// 优先从环境变量读取
 	key := os.Getenv("DB_GENERATOR_ENCRYPTION_KEY")
 	if key != "" {
 		// 如果环境变量是base64编码的，先解码
-		if decoded, err := base64.StdEncoding.DecodeString(key); err == nil && len(decoded) == 32 {
-			return decoded
+		if decoded, err := base64.StdEncoding.DecodeString(key); err == nil {
+			decodedLen := len(decoded)
+			// 检查解码后的长度是否为有效的 AES 密钥长度
+			if decodedLen == 16 || decodedLen == 24 || decodedLen == 32 {
+				return decoded
+			}
+			// 如果长度不是标准长度，调整到 32 字节（AES-256）
+			if decodedLen < 32 {
+				// 补齐到32字节
+				padded := make([]byte, 32)
+				copy(padded, decoded)
+				return padded
+			}
+			// 截断到32字节
+			return decoded[:32]
 		}
-		// 否则使用环境变量的值，补齐或截断到32字节
+		// 否则使用环境变量的原始值，补齐或截断到32字节
 		keyBytes := []byte(key)
-		if len(keyBytes) < 32 {
+		keyLen := len(keyBytes)
+
+		// 如果长度已经是有效的 AES 密钥长度，直接返回
+		if keyLen == 16 || keyLen == 24 || keyLen == 32 {
+			return keyBytes
+		}
+
+		// 否则调整到 32 字节（AES-256）
+		if keyLen < 32 {
 			// 补齐到32字节
 			padded := make([]byte, 32)
 			copy(padded, keyBytes)
 			return padded
 		}
+		// 截断到32字节
 		return keyBytes[:32]
 	}
 	return defaultKey
@@ -45,6 +68,13 @@ func EncryptPassword(password string) (string, error) {
 	}
 
 	key := getEncryptionKey()
+
+	// 验证密钥长度（AES 密钥必须是 16、24 或 32 字节）
+	keyLen := len(key)
+	if keyLen != 16 && keyLen != 24 && keyLen != 32 {
+		return "", fmt.Errorf("无效的加密密钥长度: %d 字节（必须是 16、24 或 32 字节）", keyLen)
+	}
+
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", fmt.Errorf("创建加密器失败: %w", err)
@@ -76,6 +106,13 @@ func DecryptPassword(encryptedPassword string) (string, error) {
 	}
 
 	key := getEncryptionKey()
+
+	// 验证密钥长度（AES 密钥必须是 16、24 或 32 字节）
+	keyLen := len(key)
+	if keyLen != 16 && keyLen != 24 && keyLen != 32 {
+		return "", fmt.Errorf("无效的加密密钥长度: %d 字节（必须是 16、24 或 32 字节）", keyLen)
+	}
+
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return "", fmt.Errorf("创建解密器失败: %w", err)

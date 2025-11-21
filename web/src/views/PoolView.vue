@@ -81,9 +81,12 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import api from '../api'
+import { useConnectionStore } from '../stores/connection'
+
+const connectionStore = useConnectionStore()
 
 const loading = ref(false)
 const connections = ref([])
@@ -94,8 +97,8 @@ const poolStatuses = ref([])
 
 const loadConnections = async () => {
   try {
-    const data = await api.getConnections()
-    connections.value = data.connections || []
+    await connectionStore.loadConnections()
+    connections.value = connectionStore.allConnections
   } catch (error) {
     console.error('获取连接列表失败:', error)
   }

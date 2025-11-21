@@ -1,0 +1,28 @@
+# 测试配置文件示例（可选，如果不想用环境变量）
+# 注意：不要提交包含真实密码的配置文件到版本控制
+
+test_database:
+  enabled: true
+  type: mysql  # mysql, postgres, sqlite
+  host: localhost
+  port: 3306
+  user: root
+  password: your_password  # 请替换为实际密码
+  database: test_dbdatagenerator
+
+# 或者使用 PostgreSQL
+# test_database:
+#   enabled: true
+#   type: postgres
+#   host: localhost
+#   port: 5432
+#   user: postgres
+#   password: your_password
+#   database: test_dbdatagenerator
+
+# SQLite 不需要连接信息
+# test_database:
+#   enabled: true
+#   type: sqlite
+#   database: test.db
+

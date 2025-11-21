@@ -17,8 +17,8 @@
 
 ---
 
-### 2. **WebSocket 实时更新** ⭐⭐⭐
-**当前状态**：后端已实现 WebSocket Hub，前端未使用（目前使用轮询）
+### 2. **WebSocket 实时更新** ⭐⭐⭐ ✅ 已完成
+**当前状态**：后端已实现 WebSocket Hub，前端已集成并通过 Pinia store 实时更新任务状态
 
 **需要实现**：
 - 前端连接 WebSocket：`/ws/task/:id`

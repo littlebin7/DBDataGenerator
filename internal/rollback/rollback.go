@@ -30,12 +30,12 @@ type RollbackRecord struct {
 // RollbackManager 回滚管理器
 type RollbackManager struct {
 	db      database.Database
-	storage *storage.Storage
+	storage storage.StorageInterface
 	logger  *zap.Logger
 }
 
 // NewRollbackManager 创建回滚管理器
-func NewRollbackManager(db database.Database, storageInstance *storage.Storage, logger *zap.Logger) *RollbackManager {
+func NewRollbackManager(db database.Database, storageInstance storage.StorageInterface, logger *zap.Logger) *RollbackManager {
 	return &RollbackManager{
 		db:      db,
 		storage: storageInstance,

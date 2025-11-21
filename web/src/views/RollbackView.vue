@@ -99,11 +99,14 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { Refresh } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
 import { formatTime, formatNumber } from '../utils/formatters'
+import { useTaskStore } from '../stores/task'
+
+const taskStore = useTaskStore()
 
 const loading = ref(false)
 const rollingBack = ref(false)
@@ -122,8 +125,8 @@ const partialForm = ref({
 const loadTasks = async () => {
   loading.value = true
   try {
-    const data = await api.getTasks()
-    tasks.value = (data.tasks || []).filter(t => t.status === 'completed' || t.status === 'stopped')
+    await taskStore.loadTasks()
+    tasks.value = taskStore.allTasks.filter(t => t.status === 'completed' || t.status === 'stopped')
   } catch (error) {
     ElMessage.error('获取任务列表失败: ' + (error.formattedMessage || error.message))
   } finally {

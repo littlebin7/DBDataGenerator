@@ -19,18 +19,21 @@ type Handler struct {
 	scheduler      *scheduler.Scheduler
 	wsHub          *websocket.Hub
 	historyManager *task.HistoryManager
-	storage        *storage.Storage
+	storage        storage.StorageInterface
 	logger         *zap.Logger
 }
 
 // NewHandler 创建处理器
-func NewHandler(connMgr database.ConnectionManagerInterface, templateMgr generator.TemplateManagerInterface, wsHub *websocket.Hub, storageInstance *storage.Storage, logger *zap.Logger) *Handler {
+func NewHandler(connMgr database.ConnectionManagerInterface, templateMgr generator.TemplateManagerInterface, wsHub *websocket.Hub, storageInstance storage.StorageInterface, logger *zap.Logger) *Handler {
 	manager := task.NewManager(connMgr)
 	manager.SetWebSocketHub(wsHub) // 设置WebSocket Hub
 
-	// 创建历史管理器
-	historyManager := task.NewHistoryManager(storageInstance)
-	manager.SetHistoryManager(historyManager)
+	// 创建历史管理器（仅当存储支持数据库时）
+	var historyManager *task.HistoryManager
+	if storageInstance.GetDB() != nil {
+		historyManager = task.NewHistoryManager(storageInstance)
+		manager.SetHistoryManager(historyManager)
+	}
 
 	// 创建定时任务调度器
 	sched := scheduler.NewScheduler(manager, logger)

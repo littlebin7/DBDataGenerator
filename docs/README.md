@@ -15,8 +15,10 @@
 - **[TECHNICAL.md](./TECHNICAL.md)** - 技术文档（整合）
   - 技术架构
   - 数据库支持
+  - 存储系统
   - 数据生成规则
   - API 文档
+  - 状态管理（Pinia）
   - WebSocket 实时更新
   - 前后端兼容性
 

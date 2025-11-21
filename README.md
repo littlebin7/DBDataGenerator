@@ -11,7 +11,8 @@
 - ✅ 任务管理：创建、启动、暂停、恢复、停止、删除、复制
 - ✅ 连接管理：多连接管理、连接测试、编辑、切换、树形结构选择
 - ✅ 模板管理：保存和加载配置模板，预设模板库，提高复用性
-- ✅ Web 界面：简洁美观的前端界面
+- ✅ Web 界面：简洁美观的前端界面，基于 Vue 3 + Element Plus
+- ✅ 状态管理：使用 Pinia 统一管理状态，实现组件间数据共享
 - ✅ 实时进度：WebSocket 实时推送任务状态和进度
 - ✅ 约束处理：自动处理主键、外键、唯一约束等
 - ✅ 数据预览：生成前预览示例数据
@@ -39,11 +40,12 @@
 - godror (Oracle 驱动)
 
 ### 前端
-- Vue 3
-- Element Plus
-- Vite
-- Axios
-- Socket.io-client
+- Vue 3 + Composition API
+- Element Plus UI 组件库
+- Pinia 状态管理
+- Vite 构建工具
+- Axios HTTP 客户端
+- WebSocket 实时通信
 
 ## 📚 文档
 
@@ -90,8 +92,13 @@ DBDataGenerator/
 │   ├── monitor/        # 性能监控
 │   ├── poolmonitor/   # 连接池监控
 │   ├── importexport/  # 导入导出
-│   └── storage/        # 存储抽象（SQLite）
+│   └── storage/        # 存储抽象（支持文件、SQLite、MySQL、PostgreSQL）
 ├── web/                # 前端代码
+│   ├── src/
+│   │   ├── stores/     # Pinia 状态管理（connection, task, template）
+│   │   ├── views/      # 页面组件
+│   │   ├── components/ # 公共组件
+│   │   └── api/        # API 接口封装
 ├── configs/           # 配置文件
 └── pkg/                # 公共包
 ```
@@ -206,7 +213,55 @@ log:
   level: "info"
   output: "stdout"
   file_path: "logs/app.log"
+
+# 存储配置
+storage:
+  # 存储类型: file, sqlite, mysql, mariadb, postgres, postgresql
+  type: sqlite
+  
+  # 文件存储配置（当 type 为 file 时使用）
+  connections_file: ./data/connections.json
+  templates_file: ./data/templates.json
+  
+  # SQLite 配置（当 type 为 sqlite 时使用）
+  sqlite_path: ./data/app.db
+  
+  # MySQL/MariaDB 配置（当 type 为 mysql 或 mariadb 时使用）
+  # 方式1: 使用 DSN（推荐）
+  # mysql_dsn: user:password@tcp(host:port)/dbname?charset=utf8mb4&parseTime=True&loc=Local
+  # 方式2: 使用单独配置项
+  # mysql_host: localhost
+  # mysql_port: 3306
+  # mysql_user: root
+  # mysql_password: password
+  # mysql_database: dbdatagenerator
+  # mysql_charset: utf8mb4
+  
+  # PostgreSQL 配置（当 type 为 postgres 或 postgresql 时使用）
+  # 方式1: 使用 DSN（推荐）
+  # postgres_dsn: postgres://user:password@host:port/dbname?sslmode=disable
+  # 方式2: 使用单独配置项
+  # postgres_host: localhost
+  # postgres_port: 5432
+  # postgres_user: postgres
+  # postgres_password: password
+  # postgres_database: dbdatagenerator
+  # postgres_ssl_mode: disable
 ```
+
+### 存储配置说明
+
+系统支持多种存储后端，用于保存连接配置和模板数据：
+
+- **文件存储 (file)**：使用 JSON 文件存储，适合单机部署
+- **SQLite (sqlite)**：轻量级数据库，适合小型项目（默认）
+- **MySQL/MariaDB (mysql/mariadb)**：适合生产环境，支持高并发
+- **PostgreSQL (postgres/postgresql)**：功能强大的关系型数据库
+
+**切换存储类型：**
+1. 修改 `configs/config.yaml` 中的 `storage.type` 字段
+2. 配置对应的存储参数（DSN 或单独配置项）
+3. 重启应用，系统会自动初始化表结构（数据库存储）
 
 ## API 文档
 

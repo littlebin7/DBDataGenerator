@@ -19,3 +19,37 @@ log:
   output: "stdout" # stdout/file
   file_path: "logs/app.log"
 
+# 存储配置
+storage:
+  # 存储类型: file, sqlite, mysql, mariadb, postgres, postgresql
+  type: sqlite
+  
+  # 文件存储配置（当 type 为 file 时使用）
+  connections_file: ./data/connections.json
+  templates_file: ./data/templates.json
+  
+  # SQLite 配置（当 type 为 sqlite 时使用）
+  sqlite_path: ./data/app.db
+  
+  # MySQL/MariaDB 配置（当 type 为 mysql 或 mariadb 时使用）
+  # 方式1: 使用 DSN（推荐）
+  # mysql_dsn: user:password@tcp(host:port)/dbname?charset=utf8mb4&parseTime=True&loc=Local
+  # 方式2: 使用单独配置项
+  # mysql_host: localhost
+  # mysql_port: 3306
+  # mysql_user: root
+  # mysql_password: password
+  # mysql_database: dbdatagenerator
+  # mysql_charset: utf8mb4
+  
+  # PostgreSQL 配置（当 type 为 postgres 或 postgresql 时使用）
+  # 方式1: 使用 DSN（推荐）
+  # postgres_dsn: postgres://user:password@host:port/dbname?sslmode=disable
+  # 方式2: 使用单独配置项
+  # postgres_host: localhost
+  # postgres_port: 5432
+  # postgres_user: postgres
+  # postgres_password: password
+  # postgres_database: dbdatagenerator
+  # postgres_ssl_mode: disable
+

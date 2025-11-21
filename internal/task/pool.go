@@ -31,6 +31,7 @@ type WorkerPool struct {
 	task        *Task
 	onUpdate    TaskUpdateCallback // 任务更新回调
 	onComplete  TaskUpdateCallback // 任务完成回调
+	stopWorkers []chan struct{}    // 用于停止特定 worker 的通道
 }
 
 // WorkItem 工作项
@@ -48,8 +49,9 @@ type WorkResult struct {
 
 // Worker 工作协程
 type Worker struct {
-	id   int
-	pool *WorkerPool
+	id       int
+	pool     *WorkerPool
+	stopChan chan struct{} // 用于接收停止信号
 }
 
 // NewWorkerPool 创建协程池
@@ -70,6 +72,7 @@ func NewWorkerPool(taskID string, threadCount int, db database.Database, engine 
 		task:        task,
 		onUpdate:    nil,
 		onComplete:  nil,
+		stopWorkers: make([]chan struct{}, 0),
 	}
 }
 
@@ -89,13 +92,20 @@ func (p *WorkerPool) SetCompleteCallback(callback TaskUpdateCallback) {
 
 // Start 启动协程池
 func (p *WorkerPool) Start() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
 	p.workers = make([]*Worker, p.threadCount)
+	p.stopWorkers = make([]chan struct{}, p.threadCount)
 	for i := 0; i < p.threadCount; i++ {
+		stopChan := make(chan struct{})
 		worker := &Worker{
-			id:   i,
-			pool: p,
+			id:       i,
+			pool:     p,
+			stopChan: stopChan,
 		}
 		p.workers[i] = worker
+		p.stopWorkers[i] = stopChan
 		go worker.run()
 	}
 
@@ -140,24 +150,34 @@ func (p *WorkerPool) SetThreadCount(count int) {
 	if count > p.threadCount {
 		// 增加工作协程
 		for i := p.threadCount; i < count; i++ {
+			stopChan := make(chan struct{})
 			worker := &Worker{
-				id:   i,
-				pool: p,
+				id:       i,
+				pool:     p,
+				stopChan: stopChan,
 			}
 			p.workers = append(p.workers, worker)
+			p.stopWorkers = append(p.stopWorkers, stopChan)
 			go worker.run()
 		}
 	} else if count < p.threadCount {
-		// 减少工作协程：停止多余的 worker
-		// 注意：由于 worker 是通过 channel 通信的，我们只需要停止分配新任务
-		// 现有的 worker 会在处理完当前任务后自然退出（通过 ctx.Done()）
-		// 这里我们标记需要减少的数量，worker 会在下次检查时退出
+		// 减少工作协程：优雅停止多余的 worker
 		excessCount := p.threadCount - count
 		if excessCount > 0 && excessCount <= len(p.workers) {
-			// 从末尾移除多余的 worker（它们会在处理完当前任务后退出）
-			// 注意：实际退出由 worker 的 run() 方法中的 ctx.Done() 触发
-			// 这里只是更新 workers 列表的长度，实际 worker 会自然退出
-			p.workers = p.workers[:len(p.workers)-excessCount]
+			// 从末尾开始停止多余的 worker
+			startIdx := len(p.workers) - excessCount
+			for i := startIdx; i < len(p.workers); i++ {
+				// 发送停止信号
+				select {
+				case p.stopWorkers[i] <- struct{}{}:
+				default:
+					// 如果通道已关闭或阻塞，直接关闭通道
+					close(p.stopWorkers[i])
+				}
+			}
+			// 从列表中移除
+			p.workers = p.workers[:startIdx]
+			p.stopWorkers = p.stopWorkers[:startIdx]
 		}
 	}
 	p.threadCount = count
@@ -178,6 +198,9 @@ func (w *Worker) run() {
 		select {
 		case <-w.pool.ctx.Done():
 			return
+		case <-w.stopChan:
+			// 收到停止信号，优雅退出
+			return
 		case item, ok := <-w.pool.taskChan:
 			if !ok {
 				return
@@ -193,6 +216,8 @@ func (w *Worker) run() {
 					w.pool.mu.RUnlock()
 				case <-w.pool.ctx.Done():
 					return
+				case <-w.stopChan:
+					return
 				}
 			} else {
 				w.pool.mu.RUnlock()
@@ -203,6 +228,8 @@ func (w *Worker) run() {
 			select {
 			case w.pool.resultChan <- result:
 			case <-w.pool.ctx.Done():
+				return
+			case <-w.stopChan:
 				return
 			}
 		}

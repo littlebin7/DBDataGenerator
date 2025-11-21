@@ -118,6 +118,9 @@ import { Search } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
 import { formatNumber, formatTime } from '../utils/formatters'
+import { useConnectionStore } from '../stores/connection'
+
+const connectionStore = useConnectionStore()
 
 const loading = ref(false)
 const connections = ref([])
@@ -136,8 +139,8 @@ const canCheck = computed(() => {
 
 const loadConnections = async () => {
   try {
-    const data = await api.getConnections()
-    connections.value = data.connections || []
+    await connectionStore.loadConnections()
+    connections.value = connectionStore.allConnections
   } catch (error) {
     console.error('获取连接列表失败:', error)
   }

@@ -246,6 +246,9 @@ func (e *Engine) generateForeignKeyValue(rule *FieldRule, config *TableConfig) (
 
 	// 顺序选择（使用索引）
 	index := len(values) % 1000
+	if index >= len(values) {
+		index = index % len(values)
+	}
 	return values[index], nil
 }
 

@@ -27,14 +27,16 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { SuccessFilled } from '@element-plus/icons-vue'
 import NavMenu from './components/NavMenu.vue'
-import api from './api'
+import { useConnectionStore } from './stores/connection'
 
 const route = useRoute()
-const activeConnection = ref(null)
+const connectionStore = useConnectionStore()
+
+const activeConnection = computed(() => connectionStore.currentConnection)
 
 const breadcrumbItems = computed(() => {
   const path = route.path
@@ -54,26 +56,12 @@ const breadcrumbItems = computed(() => {
   return items
 })
 
-const loadActiveConnection = async () => {
-  try {
-    const res = await api.getActiveConnection()
-    // 检查是否有有效的连接
-    if (res && res.id) {
-      activeConnection.value = res
-    } else {
-      activeConnection.value = null
-    }
-  } catch (error) {
-    activeConnection.value = null
-  }
-}
-
 onMounted(() => {
-  loadActiveConnection()
+  connectionStore.loadActiveConnection()
 })
 
 watch(() => route.path, () => {
-  loadActiveConnection()
+  connectionStore.loadActiveConnection()
 })
 </script>
 

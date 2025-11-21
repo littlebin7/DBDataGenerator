@@ -12,6 +12,7 @@ type Config struct {
 	Database  DatabaseConfig  `mapstructure:"database"`
 	Generator GeneratorConfig `mapstructure:"generator"`
 	Log       LogConfig       `mapstructure:"log"`
+	Storage   StorageConfig   `mapstructure:"storage"`
 }
 
 type ServerConfig struct {
@@ -39,6 +40,35 @@ type LogConfig struct {
 	FilePath string `mapstructure:"file_path"`
 }
 
+type StorageConfig struct {
+	Type string `mapstructure:"type"` // file, sqlite, mysql, mariadb, postgres, postgresql
+
+	// 文件存储配置
+	ConnectionsFile string `mapstructure:"connections_file"` // 连接配置文件路径
+	TemplatesFile   string `mapstructure:"templates_file"`   // 模板配置文件路径
+
+	// SQLite 配置
+	SQLitePath string `mapstructure:"sqlite_path"` // SQLite 数据库文件路径
+
+	// MySQL/MariaDB 配置
+	MySQLHost     string `mapstructure:"mysql_host"`
+	MySQLPort     int    `mapstructure:"mysql_port"`
+	MySQLUser     string `mapstructure:"mysql_user"`
+	MySQLPassword string `mapstructure:"mysql_password"`
+	MySQLDatabase string `mapstructure:"mysql_database"`
+	MySQLCharset  string `mapstructure:"mysql_charset"`
+	MySQLDSN      string `mapstructure:"mysql_dsn"` // 如果设置了 DSN，将优先使用 DSN
+
+	// PostgreSQL 配置
+	PostgresHost     string `mapstructure:"postgres_host"`
+	PostgresPort     int    `mapstructure:"postgres_port"`
+	PostgresUser     string `mapstructure:"postgres_user"`
+	PostgresPassword string `mapstructure:"postgres_password"`
+	PostgresDatabase string `mapstructure:"postgres_database"`
+	PostgresSSLMode  string `mapstructure:"postgres_ssl_mode"`
+	PostgresDSN      string `mapstructure:"postgres_dsn"` // 如果设置了 DSN，将优先使用 DSN
+}
+
 var globalConfig *Config
 
 func Load() (*Config, error) {
@@ -61,6 +91,10 @@ func Load() (*Config, error) {
 	viper.SetDefault("log.level", "info")
 	viper.SetDefault("log.output", "stdout")
 	viper.SetDefault("log.file_path", "logs/app.log")
+	viper.SetDefault("storage.type", "sqlite")
+	viper.SetDefault("storage.sqlite_path", "./data/app.db")
+	viper.SetDefault("storage.connections_file", "./data/connections.json")
+	viper.SetDefault("storage.templates_file", "./data/templates.json")
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {

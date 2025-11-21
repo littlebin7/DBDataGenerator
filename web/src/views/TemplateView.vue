@@ -80,11 +80,13 @@
 import { ref, computed, onMounted } from 'vue'
 import { Search, Refresh } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import api from '../api'
 import { formatTime } from '../utils/formatters'
+import { useTemplateStore } from '../stores/template'
 
-const loading = ref(false)
-const templates = ref([])
+const templateStore = useTemplateStore()
+
+const loading = computed(() => templateStore.loading)
+const templates = computed(() => templateStore.allTemplates)
 const searchText = ref('')
 const showDetailDialog = ref(false)
 const selectedTemplate = ref(null)
@@ -99,20 +101,16 @@ const filteredTemplates = computed(() => {
 })
 
 const loadTemplates = async () => {
-  loading.value = true
   try {
-    const data = await api.getTemplates()
-    templates.value = data.templates || []
+    await templateStore.loadTemplates()
   } catch (error) {
     ElMessage.error('获取模板列表失败: ' + (error.formattedMessage || error.message))
-  } finally {
-    loading.value = false
   }
 }
 
 const viewTemplate = async (template) => {
   try {
-    const data = await api.getTemplate(template.id)
+    const data = await templateStore.loadTemplate(template.id)
     selectedTemplate.value = data
     showDetailDialog.value = true
   } catch (error) {
@@ -127,9 +125,8 @@ const deleteTemplate = async (templateId) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    await api.deleteTemplate(templateId)
+    await templateStore.deleteTemplate(templateId)
     ElMessage.success('模板已删除')
-    await loadTemplates()
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除失败: ' + (error.formattedMessage || error.message))

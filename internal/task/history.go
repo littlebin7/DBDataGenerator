@@ -31,11 +31,11 @@ type TaskHistory struct {
 
 // HistoryManager 任务历史管理器
 type HistoryManager struct {
-	storage *storage.Storage
+	storage storage.StorageInterface
 }
 
 // NewHistoryManager 创建历史管理器
-func NewHistoryManager(storage *storage.Storage) *HistoryManager {
+func NewHistoryManager(storage storage.StorageInterface) *HistoryManager {
 	return &HistoryManager{
 		storage: storage,
 	}
