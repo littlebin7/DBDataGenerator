@@ -28,18 +28,25 @@ func SetupRoutes(router *gin.Engine, handler *Handler) {
 		api.GET("/connection/active", handler.GetActiveConnection) // 必须在 /connection/:id 之前
 		api.PUT("/connection/:id", handler.UpdateConnection)
 		api.POST("/connection/:id/switch", handler.SwitchConnection)
+		api.POST("/connection/:id/reconnect", handler.Reconnect)
 		api.DELETE("/connection/:id", handler.Disconnect)
+		// 连接导入导出
+		api.POST("/connections/export", handler.ExportConnections)
+		api.POST("/connections/import/preview", handler.ImportConnectionsPreview)
+		api.POST("/connections/import", handler.ImportConnections)
 
 		// 数据库操作
 		api.GET("/databases", handler.GetDatabases)
 		api.GET("/tables", handler.GetTables)
 		api.GET("/table/:name/schema", handler.GetTableSchema)
+		api.GET("/table/count", handler.GetTableCount)
 
 		// 任务管理
 		api.POST("/task/create", handler.CreateTask)
 		api.GET("/tasks", handler.GetTasks)
 		api.GET("/task/:id", handler.GetTask)
 		api.POST("/task/:id/start", handler.StartTask)
+		api.POST("/task/:id/retry", handler.RetryTask)
 		api.POST("/task/:id/pause", handler.PauseTask)
 		api.POST("/task/:id/resume", handler.ResumeTask)
 		api.POST("/task/:id/stop", handler.StopTask)

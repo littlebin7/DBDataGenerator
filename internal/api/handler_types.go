@@ -6,15 +6,16 @@ import (
 
 // ConnectRequest 连接请求
 type ConnectRequest struct {
-	Name     string `json:"name"` // 连接名称
-	Type     string `json:"type"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	User     string `json:"user"`
-	Password string `json:"password"`
-	Database string `json:"database"`
-	SSLMode  string `json:"ssl_mode"`
-	Charset  string `json:"charset"`
+	Name         string `json:"name"` // 连接名称
+	Type         string `json:"type"`
+	Host         string `json:"host"`
+	Port         int    `json:"port"`
+	User         string `json:"user"`
+	Password     string `json:"password"`
+	Database     string `json:"database"`
+	SSLMode      string `json:"ssl_mode"`
+	Charset      string `json:"charset"`
+	SavePassword bool   `json:"save_password"` // 是否保存密码
 }
 
 // TestConnectionRequest 测试连接请求
@@ -31,15 +32,16 @@ type TestConnectionRequest struct {
 
 // UpdateConnectionRequest 更新连接请求
 type UpdateConnectionRequest struct {
-	Name     string `json:"name"`
-	Type     string `json:"type"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	User     string `json:"user"`
-	Password string `json:"password"`
-	Database string `json:"database"`
-	SSLMode  string `json:"ssl_mode"`
-	Charset  string `json:"charset"`
+	Name         string `json:"name"`
+	Type         string `json:"type"`
+	Host         string `json:"host"`
+	Port         int    `json:"port"`
+	User         string `json:"user"`
+	Password     string `json:"password"`
+	Database     string `json:"database"`
+	SSLMode      string `json:"ssl_mode"`
+	Charset      string `json:"charset"`
+	SavePassword bool   `json:"save_password"` // 是否保存密码
 }
 
 // CreateTaskRequest 创建任务请求

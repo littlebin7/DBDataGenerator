@@ -28,9 +28,18 @@ export const useConnectionStore = defineStore('connection', {
       this.loading = true
       try {
         const data = await api.getConnections()
-        this.connections = data.connections || []
+        // 处理响应数据
+        if (data && data.connections) {
+          this.connections = data.connections
+        } else if (Array.isArray(data)) {
+          // 如果直接返回数组
+          this.connections = data
+        } else {
+          this.connections = []
+        }
       } catch (error) {
         console.error('加载连接列表失败:', error)
+        this.connections = []
         throw error
       } finally {
         this.loading = false

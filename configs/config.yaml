@@ -2,6 +2,9 @@ server:
   host: "0.0.0.0"
   port: 8080
   mode: "debug" # debug/release
+  # 开发模式配置
+  dev_mode: true # 设置为 true 启用开发模式，前端请求将代理到 Vite 开发服务器
+  vite_dev_server: "http://localhost:5173" # Vite 开发服务器地址
 
 database:
   max_connections: 10

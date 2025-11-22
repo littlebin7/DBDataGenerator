@@ -2,6 +2,7 @@ package task
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -113,11 +114,50 @@ func (p *WorkerPool) Start() {
 	go p.collectResults()
 }
 
-// Stop 停止协程池
+// Stop 停止协程池（带超时）
 func (p *WorkerPool) Stop() {
+	p.StopWithTimeout(5 * time.Second)
+}
+
+// StopWithTimeout 停止协程池（带超时）
+func (p *WorkerPool) StopWithTimeout(timeout time.Duration) {
+	// 1. 取消 context，通知所有 worker 停止
 	p.cancel()
+
+	// 2. 关闭通道，防止新的工作项被添加
+	p.mu.Lock()
 	close(p.taskChan)
 	close(p.resultChan)
+
+	// 3. 向所有 worker 发送停止信号
+	for _, stopChan := range p.stopWorkers {
+		select {
+		case stopChan <- struct{}{}:
+		default:
+			// 如果通道已满或已关闭，直接关闭通道
+			close(stopChan)
+		}
+	}
+	p.mu.Unlock()
+
+	// 4. 等待所有 worker 退出（带超时）
+	// 由于无法直接等待 goroutine 退出，我们使用超时机制
+	// 如果超时，强制关闭所有停止通道
+	select {
+	case <-time.After(timeout):
+		// 超时，强制清理
+		p.mu.Lock()
+		// 关闭所有 worker 的停止通道
+		for _, stopChan := range p.stopWorkers {
+			select {
+			case <-stopChan:
+				// 已经关闭
+			default:
+				close(stopChan)
+			}
+		}
+		p.mu.Unlock()
+	}
 }
 
 // Pause 暂停
@@ -238,6 +278,21 @@ func (w *Worker) run() {
 
 // execute 执行工作项
 func (w *Worker) execute(item *WorkItem) *WorkResult {
+	// 检查是否已取消
+	select {
+	case <-w.pool.ctx.Done():
+		return &WorkResult{
+			FailedCount: int64(item.BatchSize),
+			Error:       w.pool.ctx.Err(),
+		}
+	case <-w.stopChan:
+		return &WorkResult{
+			FailedCount: int64(item.BatchSize),
+			Error:       fmt.Errorf("任务已停止"),
+		}
+	default:
+	}
+
 	// 生成数据
 	rows, err := w.pool.engine.GenerateBatch(w.pool.ctx, w.pool.config, item.StartIndex, item.BatchSize)
 	if err != nil {
@@ -247,13 +302,64 @@ func (w *Worker) execute(item *WorkItem) *WorkResult {
 		}
 	}
 
-	// 插入数据库
-	err = w.pool.db.BatchInsert(w.pool.config.Database, w.pool.config.TableName, rows)
-	if err != nil {
+	// 再次检查是否已取消（生成数据可能耗时）
+	select {
+	case <-w.pool.ctx.Done():
 		return &WorkResult{
-			SuccessCount: 0,
-			FailedCount:  int64(len(rows)),
-			Error:        err,
+			FailedCount: int64(len(rows)),
+			Error:       w.pool.ctx.Err(),
+		}
+	case <-w.stopChan:
+		return &WorkResult{
+			FailedCount: int64(len(rows)),
+			Error:       fmt.Errorf("任务已停止"),
+		}
+	default:
+	}
+
+	// 插入数据库（这里可能阻塞）
+	// 使用 goroutine 执行数据库操作，以便能够响应停止信号
+	insertDone := make(chan error, 1)
+	go func() {
+		insertDone <- w.pool.db.BatchInsert(w.pool.config.Database, w.pool.config.TableName, rows)
+	}()
+
+	// 等待数据库操作完成或收到停止信号
+	select {
+	case <-w.pool.ctx.Done():
+		// Context 已取消，返回失败结果
+		return &WorkResult{
+			FailedCount: int64(len(rows)),
+			Error:       w.pool.ctx.Err(),
+		}
+	case <-w.stopChan:
+		// 收到停止信号，返回失败结果
+		return &WorkResult{
+			FailedCount: int64(len(rows)),
+			Error:       fmt.Errorf("任务已停止"),
+		}
+	case err := <-insertDone:
+		// 数据库操作完成
+		if err != nil {
+			// 再次检查是否是因为取消导致的错误
+			select {
+			case <-w.pool.ctx.Done():
+				return &WorkResult{
+					FailedCount: int64(len(rows)),
+					Error:       w.pool.ctx.Err(),
+				}
+			case <-w.stopChan:
+				return &WorkResult{
+					FailedCount: int64(len(rows)),
+					Error:       fmt.Errorf("任务已停止"),
+				}
+			default:
+				return &WorkResult{
+					SuccessCount: 0,
+					FailedCount:  int64(len(rows)),
+					Error:        err,
+				}
+			}
 		}
 	}
 
@@ -281,6 +387,13 @@ func (p *WorkerPool) collectResults() {
 			totalSuccess += result.SuccessCount
 			totalFailed += result.FailedCount
 
+			// 如果结果有错误，记录错误信息
+			if result.Error != nil {
+				p.task.mu.Lock()
+				p.task.Error = result.Error.Error()
+				p.task.mu.Unlock()
+			}
+
 			// 更新任务进度
 			elapsed := time.Since(startTime)
 			speed := float64(totalGenerated) / elapsed.Seconds()
@@ -296,6 +409,21 @@ func (p *WorkerPool) collectResults() {
 			p.mu.RUnlock()
 			if onUpdate != nil {
 				onUpdate(p.task)
+			}
+
+			// 如果连续失败过多，标记任务为错误状态
+			if totalFailed > 0 && totalSuccess == 0 && totalGenerated >= 100 {
+				// 如果前100条全部失败，标记为错误
+				p.task.SetStatus(TaskStatusError)
+				now := time.Now()
+				p.task.EndTime = &now
+				p.mu.RLock()
+				onComplete := p.onComplete
+				p.mu.RUnlock()
+				if onComplete != nil {
+					onComplete(p.task)
+				}
+				return
 			}
 
 			// 检查是否完成（确保不超过总行数）

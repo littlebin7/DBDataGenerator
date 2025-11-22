@@ -175,3 +175,159 @@ func TestScheduler_GetAllSchedules(t *testing.T) {
 		t.Errorf("期望至少2个定时任务，实际 %d", len(allSchedules))
 	}
 }
+
+func TestScheduler_EnableSchedule(t *testing.T) {
+	mockConnMgr := &MockConnectionManagerForScheduler{}
+	taskMgr := task.NewManager(mockConnMgr)
+	logger := zap.NewNop()
+
+	scheduler := NewScheduler(taskMgr, logger)
+	defer scheduler.Stop()
+
+	// 先添加一个任务
+	_, err := scheduler.AddSchedule("test-task-1", "0 0 0 * * *")
+	if err != nil {
+		t.Fatalf("添加定时任务失败: %v", err)
+	}
+
+	// 禁用任务
+	err = scheduler.DisableSchedule("test-task-1")
+	if err != nil {
+		t.Fatalf("禁用定时任务失败: %v", err)
+	}
+
+	// 验证任务已禁用
+	scheduledTask, err := scheduler.GetSchedule("test-task-1")
+	if err != nil {
+		t.Fatalf("获取定时任务失败: %v", err)
+	}
+	if scheduledTask.Enabled {
+		t.Error("期望任务已禁用，但任务仍启用")
+	}
+
+	// 启用任务
+	err = scheduler.EnableSchedule("test-task-1")
+	if err != nil {
+		t.Fatalf("启用定时任务失败: %v", err)
+	}
+
+	// 验证任务已启用
+	scheduledTask, err = scheduler.GetSchedule("test-task-1")
+	if err != nil {
+		t.Fatalf("获取定时任务失败: %v", err)
+	}
+	if !scheduledTask.Enabled {
+		t.Error("期望任务已启用，但任务仍禁用")
+	}
+}
+
+func TestScheduler_DisableSchedule(t *testing.T) {
+	mockConnMgr := &MockConnectionManagerForScheduler{}
+	taskMgr := task.NewManager(mockConnMgr)
+	logger := zap.NewNop()
+
+	scheduler := NewScheduler(taskMgr, logger)
+	defer scheduler.Stop()
+
+	// 先添加一个任务
+	_, err := scheduler.AddSchedule("test-task-1", "0 0 0 * * *")
+	if err != nil {
+		t.Fatalf("添加定时任务失败: %v", err)
+	}
+
+	// 禁用任务
+	err = scheduler.DisableSchedule("test-task-1")
+	if err != nil {
+		t.Fatalf("禁用定时任务失败: %v", err)
+	}
+
+	// 验证任务已禁用
+	scheduledTask, err := scheduler.GetSchedule("test-task-1")
+	if err != nil {
+		t.Fatalf("获取定时任务失败: %v", err)
+	}
+	if scheduledTask.Enabled {
+		t.Error("期望任务已禁用，但任务仍启用")
+	}
+}
+
+func TestScheduler_EnableSchedule_NotExists(t *testing.T) {
+	mockConnMgr := &MockConnectionManagerForScheduler{}
+	taskMgr := task.NewManager(mockConnMgr)
+	logger := zap.NewNop()
+
+	scheduler := NewScheduler(taskMgr, logger)
+	defer scheduler.Stop()
+
+	// 尝试启用不存在的任务
+	err := scheduler.EnableSchedule("non-existent")
+	if err == nil {
+		t.Error("期望启用不存在的任务时返回错误")
+	}
+}
+
+func TestScheduler_DisableSchedule_NotExists(t *testing.T) {
+	mockConnMgr := &MockConnectionManagerForScheduler{}
+	taskMgr := task.NewManager(mockConnMgr)
+	logger := zap.NewNop()
+
+	scheduler := NewScheduler(taskMgr, logger)
+	defer scheduler.Stop()
+
+	// 尝试禁用不存在的任务
+	err := scheduler.DisableSchedule("non-existent")
+	if err == nil {
+		t.Error("期望禁用不存在的任务时返回错误")
+	}
+}
+
+func TestScheduler_AddSchedule_Duplicate(t *testing.T) {
+	mockConnMgr := &MockConnectionManagerForScheduler{}
+	taskMgr := task.NewManager(mockConnMgr)
+	logger := zap.NewNop()
+
+	scheduler := NewScheduler(taskMgr, logger)
+	defer scheduler.Stop()
+
+	// 添加第一个任务
+	_, err := scheduler.AddSchedule("test-task-1", "0 0 0 * * *")
+	if err != nil {
+		t.Fatalf("添加定时任务失败: %v", err)
+	}
+
+	// 尝试添加重复的任务
+	_, err = scheduler.AddSchedule("test-task-1", "0 0 1 * * *")
+	if err == nil {
+		t.Error("期望添加重复的任务时返回错误")
+	}
+}
+
+func TestScheduler_RemoveSchedule_NotExists(t *testing.T) {
+	mockConnMgr := &MockConnectionManagerForScheduler{}
+	taskMgr := task.NewManager(mockConnMgr)
+	logger := zap.NewNop()
+
+	scheduler := NewScheduler(taskMgr, logger)
+	defer scheduler.Stop()
+
+	// 尝试删除不存在的任务
+	err := scheduler.RemoveSchedule("non-existent")
+	if err == nil {
+		t.Error("期望删除不存在的任务时返回错误")
+	}
+}
+
+func TestScheduler_GetSchedule_NotExists(t *testing.T) {
+	mockConnMgr := &MockConnectionManagerForScheduler{}
+	taskMgr := task.NewManager(mockConnMgr)
+	logger := zap.NewNop()
+
+	scheduler := NewScheduler(taskMgr, logger)
+	defer scheduler.Stop()
+
+	// 尝试获取不存在的任务
+	_, err := scheduler.GetSchedule("non-existent")
+	if err == nil {
+		t.Error("期望获取不存在的任务时返回错误")
+	}
+}

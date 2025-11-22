@@ -2,8 +2,17 @@ package database
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 )
+
+// getTempSQLiteFile 获取临时 SQLite 文件路径
+func getTempSQLiteFile(t *testing.T) string {
+	tmpFile := filepath.Join(os.TempDir(), "test_sqlite_"+t.Name()+".db")
+	// 清理可能存在的旧文件
+	os.Remove(tmpFile)
+	return tmpFile
+}
 
 func TestNewSQLiteDB(t *testing.T) {
 	db := NewSQLiteDB()
@@ -13,12 +22,13 @@ func TestNewSQLiteDB(t *testing.T) {
 }
 
 func TestSQLiteDB_Connect(t *testing.T) {
-	db := NewSQLiteDB()
+	tmpFile := getTempSQLiteFile(t)
+	defer os.Remove(tmpFile)
 
-	// 使用内存数据库
+	db := NewSQLiteDB()
 	config := &ConnectionConfig{
 		Type:     "sqlite",
-		Database: ":memory:",
+		Database: tmpFile,
 	}
 
 	err := db.Connect(config)
@@ -46,10 +56,13 @@ func TestSQLiteDB_Connect_WithFile(t *testing.T) {
 }
 
 func TestSQLiteDB_TestConnection(t *testing.T) {
+	tmpFile := getTempSQLiteFile(t)
+	defer os.Remove(tmpFile)
+
 	db := NewSQLiteDB()
 	config := &ConnectionConfig{
 		Type:     "sqlite",
-		Database: ":memory:",
+		Database: tmpFile,
 	}
 
 	err := db.Connect(config)
@@ -75,10 +88,13 @@ func TestSQLiteDB_TestConnection_NotConnected(t *testing.T) {
 }
 
 func TestSQLiteDB_GetDatabases(t *testing.T) {
+	tmpFile := getTempSQLiteFile(t)
+	defer os.Remove(tmpFile)
+
 	db := NewSQLiteDB()
 	config := &ConnectionConfig{
 		Type:     "sqlite",
-		Database: ":memory:",
+		Database: tmpFile,
 	}
 
 	err := db.Connect(config)
@@ -98,10 +114,13 @@ func TestSQLiteDB_GetDatabases(t *testing.T) {
 }
 
 func TestSQLiteDB_GetTables(t *testing.T) {
+	tmpFile := getTempSQLiteFile(t)
+	defer os.Remove(tmpFile)
+
 	db := NewSQLiteDB()
 	config := &ConnectionConfig{
 		Type:     "sqlite",
-		Database: ":memory:",
+		Database: tmpFile,
 	}
 
 	err := db.Connect(config)
@@ -135,10 +154,13 @@ func TestSQLiteDB_GetTables(t *testing.T) {
 }
 
 func TestSQLiteDB_GetTableSchema(t *testing.T) {
+	tmpFile := getTempSQLiteFile(t)
+	defer os.Remove(tmpFile)
+
 	db := NewSQLiteDB()
 	config := &ConnectionConfig{
 		Type:     "sqlite",
-		Database: ":memory:",
+		Database: tmpFile,
 	}
 
 	err := db.Connect(config)
@@ -196,10 +218,13 @@ func TestSQLiteDB_GetTableSchema(t *testing.T) {
 }
 
 func TestSQLiteDB_BatchInsert(t *testing.T) {
+	tmpFile := getTempSQLiteFile(t)
+	defer os.Remove(tmpFile)
+
 	db := NewSQLiteDB()
 	config := &ConnectionConfig{
 		Type:     "sqlite",
-		Database: ":memory:",
+		Database: tmpFile,
 	}
 
 	err := db.Connect(config)
@@ -239,10 +264,13 @@ func TestSQLiteDB_BatchInsert(t *testing.T) {
 }
 
 func TestSQLiteDB_BatchInsert_Empty(t *testing.T) {
+	tmpFile := getTempSQLiteFile(t)
+	defer os.Remove(tmpFile)
+
 	db := NewSQLiteDB()
 	config := &ConnectionConfig{
 		Type:     "sqlite",
-		Database: ":memory:",
+		Database: tmpFile,
 	}
 
 	err := db.Connect(config)
@@ -259,10 +287,13 @@ func TestSQLiteDB_BatchInsert_Empty(t *testing.T) {
 }
 
 func TestSQLiteDB_QueryTableData(t *testing.T) {
+	tmpFile := getTempSQLiteFile(t)
+	defer os.Remove(tmpFile)
+
 	db := NewSQLiteDB()
 	config := &ConnectionConfig{
 		Type:     "sqlite",
-		Database: ":memory:",
+		Database: tmpFile,
 	}
 
 	err := db.Connect(config)
@@ -294,10 +325,13 @@ func TestSQLiteDB_QueryTableData(t *testing.T) {
 }
 
 func TestSQLiteDB_GetTableCount(t *testing.T) {
+	tmpFile := getTempSQLiteFile(t)
+	defer os.Remove(tmpFile)
+
 	db := NewSQLiteDB()
 	config := &ConnectionConfig{
 		Type:     "sqlite",
-		Database: ":memory:",
+		Database: tmpFile,
 	}
 
 	err := db.Connect(config)
@@ -328,10 +362,13 @@ func TestSQLiteDB_GetTableCount(t *testing.T) {
 }
 
 func TestSQLiteDB_GetForeignTableData(t *testing.T) {
+	tmpFile := getTempSQLiteFile(t)
+	defer os.Remove(tmpFile)
+
 	db := NewSQLiteDB()
 	config := &ConnectionConfig{
 		Type:     "sqlite",
-		Database: ":memory:",
+		Database: tmpFile,
 	}
 
 	err := db.Connect(config)
@@ -363,10 +400,13 @@ func TestSQLiteDB_GetForeignTableData(t *testing.T) {
 }
 
 func TestSQLiteDB_ExecuteQuery(t *testing.T) {
+	tmpFile := getTempSQLiteFile(t)
+	defer os.Remove(tmpFile)
+
 	db := NewSQLiteDB()
 	config := &ConnectionConfig{
 		Type:     "sqlite",
-		Database: ":memory:",
+		Database: tmpFile,
 	}
 
 	err := db.Connect(config)
@@ -398,10 +438,13 @@ func TestSQLiteDB_ExecuteQuery(t *testing.T) {
 }
 
 func TestSQLiteDB_ExecuteNonQuery(t *testing.T) {
+	tmpFile := getTempSQLiteFile(t)
+	defer os.Remove(tmpFile)
+
 	db := NewSQLiteDB()
 	config := &ConnectionConfig{
 		Type:     "sqlite",
-		Database: ":memory:",
+		Database: tmpFile,
 	}
 
 	err := db.Connect(config)
@@ -436,10 +479,13 @@ func TestSQLiteDB_GetDBType(t *testing.T) {
 }
 
 func TestSQLiteDB_Disconnect(t *testing.T) {
+	tmpFile := getTempSQLiteFile(t)
+	defer os.Remove(tmpFile)
+
 	db := NewSQLiteDB()
 	config := &ConnectionConfig{
 		Type:     "sqlite",
-		Database: ":memory:",
+		Database: tmpFile,
 	}
 
 	err := db.Connect(config)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -149,8 +150,9 @@ func (e *Engine) generateFieldValue(rule *FieldRule, index int64, config *TableC
 				return gen.Generate(rule, index)
 			}
 		}
-		// 默认使用 UUID
-		if rule.RuleType == "" || rule.RuleType == "function" {
+		// 如果规则类型为空，默认使用 UUID
+		// 如果规则类型是 function，使用用户配置的函数（不强制使用 UUID）
+		if rule.RuleType == "" {
 			uuidRule := &FieldRule{
 				RuleType: "function",
 				Config: FunctionConfig{
@@ -163,6 +165,7 @@ func (e *Engine) generateFieldValue(rule *FieldRule, index int64, config *TableC
 				return gen.Generate(uuidRule, index)
 			}
 		}
+		// 如果规则类型是 function 且有配置，继续使用用户配置的函数
 	}
 
 	// 处理 reference 规则（需要行数据）
@@ -267,6 +270,12 @@ func (e *Engine) applyConstraints(rule *FieldRule, value interface{}, config *Ta
 		return nil, nil
 	}
 
+	// 检查字段类型边界
+	value, err := e.applyFieldBoundaries(rule, value)
+	if err != nil {
+		return nil, err
+	}
+
 	// 处理唯一约束
 	if rule.IsUnique {
 		key := fmt.Sprintf("%s.%s", config.TableName, rule.FieldName)
@@ -287,6 +296,63 @@ func (e *Engine) applyConstraints(rule *FieldRule, value interface{}, config *Ta
 		}
 		e.mu.Unlock()
 		return nil, fmt.Errorf("无法生成唯一值（重试 %d 次后失败）", maxRetries)
+	}
+
+	return value, nil
+}
+
+// applyFieldBoundaries 应用字段边界限制
+func (e *Engine) applyFieldBoundaries(rule *FieldRule, value interface{}) (interface{}, error) {
+	fieldType := strings.ToLower(rule.FieldType)
+
+	// 检查字符串类型的长度限制
+	if strings.Contains(fieldType, "varchar") || strings.Contains(fieldType, "char") ||
+		strings.Contains(fieldType, "text") || strings.Contains(fieldType, "string") {
+		// 如果字段是字符串类型，但值是其他类型（数值、日期等），需要转换为字符串
+		var strValue string
+		switch v := value.(type) {
+		case string:
+			strValue = v
+		case int, int8, int16, int32, int64:
+			strValue = fmt.Sprintf("%d", v)
+		case uint, uint8, uint16, uint32, uint64:
+			strValue = fmt.Sprintf("%d", v)
+		case float32, float64:
+			strValue = fmt.Sprintf("%g", v)
+		case time.Time:
+			strValue = v.Format("2006-01-02 15:04:05")
+		default:
+			strValue = fmt.Sprintf("%v", v)
+		}
+
+		// 检查长度限制（MaxLength > 0 表示有长度限制）
+		if rule.MaxLength > 0 && len(strValue) > rule.MaxLength {
+			// 截断到最大长度
+			strValue = strValue[:rule.MaxLength]
+		}
+
+		return strValue, nil
+	}
+
+	// 检查数值类型的精度和范围
+	if strings.Contains(fieldType, "int") || strings.Contains(fieldType, "decimal") ||
+		strings.Contains(fieldType, "numeric") || strings.Contains(fieldType, "float") {
+		// 对于数值类型，如果值是字符串，尝试转换为数值
+		if str, ok := value.(string); ok {
+			// 尝试解析为数值
+			if strings.Contains(fieldType, "float") || strings.Contains(fieldType, "decimal") || strings.Contains(fieldType, "numeric") {
+				if f, err := strconv.ParseFloat(str, 64); err == nil {
+					value = f
+				}
+			} else {
+				if i, err := strconv.ParseInt(str, 10, 64); err == nil {
+					value = i
+				}
+			}
+		}
+
+		// TODO: 可以在这里添加精度和范围的检查
+		// 例如：检查 decimal(10,2) 的精度和范围
 	}
 
 	return value, nil

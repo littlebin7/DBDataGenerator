@@ -9,9 +9,10 @@ const api = axios.create({
 api.interceptors.response.use(
   (response) => {
     // 处理新的成功响应格式 { message, data }
-    // 如果响应包含 data 字段，直接返回 data
+    // 如果响应包含 data 字段，提取 data 但保留其他字段（如 count）
     if (response.data && response.data.data !== undefined) {
-      return { ...response, data: response.data.data }
+      const { data, ...rest } = response.data
+      return { ...response, data, ...rest }
     }
     return response
   },
@@ -71,8 +72,35 @@ export default {
     return response.data
   },
 
+  async reconnect(connId) {
+    const response = await api.post(`/connection/${connId}/reconnect`)
+    return response.data
+  },
+
   async disconnect(connId) {
     const response = await api.delete(`/connection/${connId}`)
+    return response.data
+  },
+
+  async exportConnections(connectionIds) {
+    const response = await api.post('/connections/export', { connection_ids: connectionIds })
+    return response.data
+  },
+
+  async importConnectionsPreview(file) {
+    const formData = new FormData()
+    formData.append('file', file)
+    const response = await api.post('/connections/import/preview', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+    return response.data
+  },
+
+  async importConnections(data) {
+    // data 格式：{ connections: [...], conflict_resolution: 'skip' | 'overwrite' }
+    const response = await api.post('/connections/import', data)
     return response.data
   },
 
@@ -99,7 +127,18 @@ export default {
     if (connectionId) {
       params.connection_id = connectionId
     }
-    const response = await api.get(`/table/${table}/schema`, { params })
+    // 对表名进行 URL 编码，处理特殊字符（如 ##）
+    const encodedTable = encodeURIComponent(table)
+    const response = await api.get(`/table/${encodedTable}/schema`, { params })
+    return response.data
+  },
+
+  async getTableCount(database, table, connectionId) {
+    const params = { database, table }
+    if (connectionId) {
+      params.connection_id = connectionId
+    }
+    const response = await api.get('/table/count', { params })
     return response.data
   },
 
@@ -124,6 +163,11 @@ export default {
 
   async startTask(taskId) {
     const response = await api.post(`/task/${taskId}/start`)
+    return response.data
+  },
+
+  async retryTask(taskId) {
+    const response = await api.post(`/task/${taskId}/retry`)
     return response.data
   },
 

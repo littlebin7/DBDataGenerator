@@ -4,12 +4,32 @@
 
 /**
  * 格式化时间
- * @param {string|Date} timeStr - 时间字符串或 Date 对象
+ * @param {string|Date|number} timeStr - 时间字符串、Date 对象或时间戳（秒或毫秒）
  * @returns {string} 格式化后的时间字符串
  */
 export function formatTime(timeStr) {
   if (!timeStr) return '-'
-  const date = new Date(timeStr)
+  
+  let date
+  // 如果是数字，直接作为时间戳处理
+  if (typeof timeStr === 'number') {
+    // 判断是秒还是毫秒（大于 10^12 的是毫秒，否则是秒）
+    date = new Date(timeStr > 1e12 ? timeStr : timeStr * 1000)
+  } else if (typeof timeStr === 'string') {
+    // 如果是字符串，先尝试解析为数字（Unix 时间戳）
+    const timestamp = parseInt(timeStr, 10)
+    if (!isNaN(timestamp) && timestamp > 0) {
+      // 判断是秒还是毫秒（大于 10^12 的是毫秒，否则是秒）
+      date = new Date(timestamp > 1e12 ? timestamp : timestamp * 1000)
+    } else {
+      // 如果不是数字字符串，尝试直接解析为日期
+      date = new Date(timeStr)
+    }
+  } else {
+    // 如果是 Date 对象，直接使用
+    date = timeStr
+  }
+  
   if (isNaN(date.getTime())) return '-'
   return date.toLocaleString('zh-CN', {
     year: 'numeric',

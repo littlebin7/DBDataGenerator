@@ -20,7 +20,11 @@
             {{ breadcrumbItems[breadcrumbItems.length - 1] }}
           </el-breadcrumb-item>
         </el-breadcrumb>
-        <router-view />
+        <router-view v-slot="{ Component, route }">
+          <keep-alive :include="['DatabaseSelect']">
+            <component :is="Component" :key="route.path === '/database-select' ? 'DatabaseSelect' : route.path" />
+          </keep-alive>
+        </router-view>
       </el-main>
     </el-container>
   </el-container>

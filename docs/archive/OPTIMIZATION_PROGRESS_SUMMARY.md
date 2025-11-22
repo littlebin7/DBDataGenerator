@@ -38,10 +38,11 @@
 ### 3. 错误处理统一迁移（进行中）🔄
 
 **已完成**：
-- ✅ `handler_task.go` - 已完成迁移
+- ✅ `handler_task.go` - 已完成迁移（100%）
   - GetTasks, GetTask, CreateTask
   - StartTask, PauseTask, ResumeTask, StopTask
   - SetThreadCount, DeleteTask, BatchDeleteTasks
+  - BatchCreateTasks, BatchStartTasks, BatchStopTasks（已修复旧错误处理）
 
 **待完成**：
 - ⏳ `handler_connection.go` - 连接管理相关
@@ -63,7 +64,7 @@
 
 ### 高优先级
 - ✅ WebSocket 消息推送优化 - 100%
-- 🔄 错误处理统一迁移 - 约 20%（1/12 文件完成）
+- 🔄 错误处理统一迁移 - 约 25%（1/12 文件完成，handler_task.go 已完全迁移）
 
 ### 中优先级
 - ⏳ 任务执行性能指标 - 0%

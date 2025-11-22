@@ -158,6 +158,7 @@ func (g *FixedGenerator) Generate(rule *FieldRule, index int64) (interface{}, er
 
 type IncrementGenerator struct {
 	counters map[string]int64
+	mu       sync.RWMutex // 保护 counters 的并发访问
 }
 
 func NewIncrementGenerator() *IncrementGenerator {
@@ -173,6 +174,11 @@ func (g *IncrementGenerator) Generate(rule *FieldRule, index int64) (interface{}
 	}
 
 	key := rule.FieldName
+
+	// 使用互斥锁保护 map 的并发访问
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
 	if _, exists := g.counters[key]; !exists {
 		g.counters[key] = config.StartValue
 	}
@@ -227,22 +233,445 @@ func (g *RegexGenerator) Generate(rule *FieldRule, index int64) (interface{}, er
 		return nil, err
 	}
 
-	// 简单的正则生成实现（实际应该使用专门的库如 github.com/dlclark/regexp2）
-	// 这里提供一个基础实现
+	// 检查常见模式（特殊处理，高效准确）
+	if result := g.generateByCommonPattern(config.Pattern); result != "" {
+		return result, nil
+	}
+
+	// 编译正则表达式
 	re, err := regexp.Compile(config.Pattern)
 	if err != nil {
 		return nil, fmt.Errorf("无效的正则表达式: %w", err)
 	}
 
-	// 简单实现：生成随机字符串并验证
-	for i := 0; i < 100; i++ {
-		candidate := generateRandomString(20)
+	// 尝试智能生成：根据正则表达式结构生成
+	if candidate := g.generateByPatternStructure(config.Pattern, re); candidate != "" {
 		if re.MatchString(candidate) {
 			return candidate, nil
 		}
 	}
 
-	return nil, fmt.Errorf("无法生成匹配正则表达式的值")
+	// 尝试根据模式特征生成
+	if candidate := g.generateByPattern(config.Pattern); candidate != "" {
+		if re.MatchString(candidate) {
+			return candidate, nil
+		}
+	}
+
+	// 使用改进的生成策略（随机生成+验证）
+	maxAttempts := 3000
+	for i := 0; i < maxAttempts; i++ {
+		candidate := g.generateCandidateString(config.Pattern, i)
+		if re.MatchString(candidate) {
+			return candidate, nil
+		}
+	}
+
+	return nil, fmt.Errorf("无法生成匹配正则表达式的值（尝试 %d 次后失败）", maxAttempts)
+}
+
+// generateByCommonPattern 根据常见模式生成（特殊处理）
+func (g *RegexGenerator) generateByCommonPattern(pattern string) string {
+	// IP地址
+	if g.isIPAddressPattern(pattern) {
+		return g.generateIPAddress()
+	}
+
+	// 邮箱地址
+	if g.isEmailPattern(pattern) {
+		return g.generateEmailAddress()
+	}
+
+	// 手机号（中国）
+	if g.isPhoneCNPattern(pattern) {
+		return g.generatePhoneCN()
+	}
+
+	// 身份证号（中国）
+	if g.isIDCardCNPattern(pattern) {
+		return g.generateIDCardCN()
+	}
+
+	// URL地址
+	if g.isURLPattern(pattern) {
+		return g.generateURL()
+	}
+
+	// 日期（YYYY-MM-DD）
+	if g.isDatePattern(pattern) {
+		return g.generateDate()
+	}
+
+	// 时间（HH:MM:SS）
+	if g.isTimePattern(pattern) {
+		return g.generateTime()
+	}
+
+	// 邮政编码（中国）
+	if g.isPostcodeCNPattern(pattern) {
+		return g.generatePostcodeCN()
+	}
+
+	return ""
+}
+
+// isIPAddressPattern 检查是否是IP地址的正则表达式
+func (g *RegexGenerator) isIPAddressPattern(pattern string) bool {
+	// 检查是否包含IP地址的典型模式
+	// 匹配类似 ^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)(\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3})$ 的模式
+	ipIndicators := []string{
+		"25[0-5]",
+		"2[0-4][0-9]",
+		"[01]?[0-9][0-9]?",
+		"\\d{1,3}",
+	}
+
+	// 检查是否包含IP地址的典型数字范围模式
+	hasIPRange := false
+	for _, indicator := range ipIndicators {
+		if strings.Contains(pattern, indicator) {
+			hasIPRange = true
+			break
+		}
+	}
+
+	// 检查是否包含点号分隔符（IP地址格式）
+	hasDots := strings.Contains(pattern, "\\.") || strings.Contains(pattern, ".")
+
+	// 检查是否包含4个部分的模式（IP地址有4个八位组）
+	hasFourParts := strings.Contains(pattern, "{3}") || strings.Count(pattern, "\\.") >= 3 || strings.Count(pattern, ".") >= 3
+
+	return hasIPRange && hasDots && (hasFourParts || strings.Contains(pattern, "25[0-5]"))
+}
+
+// generateIPAddress 生成随机IP地址
+func (g *RegexGenerator) generateIPAddress() string {
+	octet1 := rand.Intn(256)
+	octet2 := rand.Intn(256)
+	octet3 := rand.Intn(256)
+	octet4 := rand.Intn(256)
+	return fmt.Sprintf("%d.%d.%d.%d", octet1, octet2, octet3, octet4)
+}
+
+// isEmailPattern 检查是否是邮箱地址的正则表达式
+func (g *RegexGenerator) isEmailPattern(pattern string) bool {
+	// 检查是否包含邮箱地址的典型特征
+	// 1. 包含 @ 符号
+	// 2. 包含域名部分（通常有 . 和字母）
+	// 3. 包含用户名部分（通常有字母、数字、点、下划线、连字符）
+
+	hasAtSymbol := strings.Contains(pattern, "@")
+	hasDomainPattern := strings.Contains(pattern, "\\.[A-Za-z]") ||
+		strings.Contains(pattern, "\\.[a-z]") ||
+		strings.Contains(pattern, "\\.[A-Z]") ||
+		(strings.Contains(pattern, ".") &&
+			(strings.Contains(pattern, "[A-Za-z]") || strings.Contains(pattern, "[a-z]")))
+
+	hasUsernamePattern := strings.Contains(pattern, "[A-Za-z0-9]") ||
+		strings.Contains(pattern, "[a-z0-9]") ||
+		strings.Contains(pattern, "[-._]")
+
+	return hasAtSymbol && hasDomainPattern && hasUsernamePattern
+}
+
+// generateEmailAddress 生成随机邮箱地址
+func (g *RegexGenerator) generateEmailAddress() string {
+	// 生成用户名部分（5-15个字符）
+	usernameLength := 5 + rand.Intn(11)
+	username := g.generateEmailUsername(usernameLength)
+
+	// 生成域名部分
+	domains := []string{
+		"com", "net", "org", "edu", "gov", "cn", "io", "co", "uk", "de",
+		"fr", "jp", "au", "ca", "info", "biz", "tech", "online", "site", "xyz",
+	}
+
+	// 主域名
+	mainDomain := domains[rand.Intn(len(domains))]
+
+	// 有时添加二级域名
+	if rand.Float32() < 0.3 {
+		subdomains := []string{"mail", "email", "web", "www", "app", "api", "blog", "news"}
+		subdomain := subdomains[rand.Intn(len(subdomains))]
+		return fmt.Sprintf("%s@%s.%s", username, subdomain, mainDomain)
+	}
+
+	// 有时使用多级域名（如 .com.cn）
+	if rand.Float32() < 0.2 && mainDomain == "cn" {
+		return fmt.Sprintf("%s@example.%s", username, mainDomain)
+	}
+
+	return fmt.Sprintf("%s@example.%s", username, mainDomain)
+}
+
+// generateEmailUsername 生成邮箱用户名部分
+func (g *RegexGenerator) generateEmailUsername(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	separators := []string{"", ".", "_", "-"}
+
+	username := make([]byte, 0, length)
+
+	for i := 0; i < length; i++ {
+		// 随机决定是否插入分隔符
+		if i > 0 && i < length-1 && rand.Float32() < 0.15 {
+			sep := separators[rand.Intn(len(separators))]
+			if sep != "" {
+				username = append(username, []byte(sep)...)
+				i += len(sep) - 1
+				continue
+			}
+		}
+
+		// 添加随机字符
+		char := charset[rand.Intn(len(charset))]
+		username = append(username, char)
+	}
+
+	return string(username)
+}
+
+// generateByPattern 根据正则表达式模式尝试生成候选字符串
+func (g *RegexGenerator) generateByPattern(pattern string) string {
+	// 处理数字范围模式 [0-9], \d
+	if matched, _ := regexp.MatchString(`\d+`, pattern); matched {
+		// 尝试生成数字
+		return fmt.Sprintf("%d", rand.Intn(10000))
+	}
+
+	// 处理字母模式 [a-z], [A-Z]
+	if strings.Contains(pattern, "[a-z]") || strings.Contains(pattern, "[A-Z]") {
+		return generateRandomString(10)
+	}
+
+	return ""
+}
+
+// generateCandidateString 根据尝试次数生成不同长度的候选字符串
+func (g *RegexGenerator) generateCandidateString(pattern string, attempt int) string {
+	// 分析模式特征
+	hasDigits := strings.Contains(pattern, "\\d") || strings.Contains(pattern, "[0-9]")
+	hasLetters := strings.Contains(pattern, "[A-Za-z]") || strings.Contains(pattern, "[a-z]") || strings.Contains(pattern, "[A-Z]")
+	hasSpecialChars := strings.Contains(pattern, "[-._]") || strings.Contains(pattern, "[@]")
+
+	// 根据尝试次数调整长度
+	baseLength := 5
+	length := baseLength + (attempt % 30)
+	if length > 50 {
+		length = 50
+	}
+
+	// 根据模式特征生成字符串
+	if hasDigits && hasLetters {
+		// 混合数字和字母
+		return g.generateMixedString(length)
+	} else if hasDigits {
+		// 纯数字
+		return g.generateNumericString(length)
+	} else if hasLetters {
+		// 纯字母
+		return generateRandomString(length)
+	} else if hasSpecialChars {
+		// 包含特殊字符
+		return g.generateStringWithSpecialChars(pattern, length)
+	}
+
+	// 默认生成随机字符串
+	return generateRandomString(length)
+}
+
+// generateNumericString 生成纯数字字符串
+func (g *RegexGenerator) generateNumericString(length int) string {
+	const charset = "0123456789"
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[rand.Intn(len(charset))]
+	}
+	return string(b)
+}
+
+// generateStringWithSpecialChars 生成包含特殊字符的字符串
+func (g *RegexGenerator) generateStringWithSpecialChars(pattern string, length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	specialChars := []string{".", "-", "_", "@"}
+
+	result := make([]byte, 0, length)
+
+	for i := 0; i < length; i++ {
+		// 随机决定是否插入特殊字符
+		if i > 0 && i < length-1 && rand.Float32() < 0.2 {
+			special := specialChars[rand.Intn(len(specialChars))]
+			result = append(result, []byte(special)...)
+			i += len(special) - 1
+			continue
+		}
+
+		// 添加随机字符
+		char := charset[rand.Intn(len(charset))]
+		result = append(result, char)
+	}
+
+	return string(result)
+}
+
+// generateMixedString 生成包含数字和字母的混合字符串
+func (g *RegexGenerator) generateMixedString(length int) string {
+	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	b := make([]byte, length)
+	for i := range b {
+		b[i] = charset[rand.Intn(len(charset))]
+	}
+	return string(b)
+}
+
+// 常见模式检测和生成函数
+
+// isPhoneCNPattern 检查是否是中国手机号的正则表达式
+func (g *RegexGenerator) isPhoneCNPattern(pattern string) bool {
+	return strings.Contains(pattern, "1[3-9]") && strings.Contains(pattern, "\\d{9}") ||
+		strings.Contains(pattern, "1[3-9]\\d{9}")
+}
+
+// generatePhoneCN 生成中国手机号
+func (g *RegexGenerator) generatePhoneCN() string {
+	prefixes := []string{"130", "131", "132", "133", "134", "135", "136", "137", "138", "139",
+		"150", "151", "152", "153", "155", "156", "157", "158", "159",
+		"180", "181", "182", "183", "184", "185", "186", "187", "188", "189",
+		"191", "193", "195", "196", "197", "198", "199"}
+	prefix := prefixes[rand.Intn(len(prefixes))]
+	suffix := fmt.Sprintf("%08d", rand.Intn(100000000))
+	return prefix + suffix
+}
+
+// isIDCardCNPattern 检查是否是中国身份证号的正则表达式
+func (g *RegexGenerator) isIDCardCNPattern(pattern string) bool {
+	return strings.Contains(pattern, "\\d{5}") && strings.Contains(pattern, "\\d{2}") &&
+		strings.Contains(pattern, "\\d{3}") && (strings.Contains(pattern, "[0-9Xx]") || strings.Contains(pattern, "\\d"))
+}
+
+// generateIDCardCN 生成中国身份证号
+func (g *RegexGenerator) generateIDCardCN() string {
+	// 地区码（6位）
+	areaCode := fmt.Sprintf("%06d", 110000+rand.Intn(900000))
+
+	// 出生日期（8位）
+	year := 1950 + rand.Intn(70)
+	month := 1 + rand.Intn(12)
+	daysInMonth := 28
+	if month == 2 {
+		daysInMonth = 28
+	} else if month == 4 || month == 6 || month == 9 || month == 11 {
+		daysInMonth = 30
+	} else {
+		daysInMonth = 31
+	}
+	day := 1 + rand.Intn(daysInMonth)
+	birthDate := fmt.Sprintf("%04d%02d%02d", year, month, day)
+
+	// 顺序码（3位）
+	sequence := fmt.Sprintf("%03d", rand.Intn(1000))
+
+	// 校验码（1位，可以是0-9或X）
+	checkCodes := []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9", "X"}
+	checkCode := checkCodes[rand.Intn(len(checkCodes))]
+
+	return areaCode + birthDate + sequence + checkCode
+}
+
+// isURLPattern 检查是否是URL的正则表达式
+func (g *RegexGenerator) isURLPattern(pattern string) bool {
+	return strings.Contains(pattern, "http") && (strings.Contains(pattern, "://") || strings.Contains(pattern, "https?"))
+}
+
+// generateURL 生成URL地址
+func (g *RegexGenerator) generateURL() string {
+	schemes := []string{"http", "https"}
+	scheme := schemes[rand.Intn(len(schemes))]
+
+	domains := []string{"example.com", "test.org", "demo.net", "sample.io", "website.com"}
+	domain := domains[rand.Intn(len(domains))]
+
+	paths := []string{"", "/index.html", "/page", "/api/v1", "/users", "/products"}
+	path := paths[rand.Intn(len(paths))]
+
+	if path != "" && rand.Float32() < 0.3 {
+		path += fmt.Sprintf("/%d", rand.Intn(1000))
+	}
+
+	return fmt.Sprintf("%s://%s%s", scheme, domain, path)
+}
+
+// isDatePattern 检查是否是日期（YYYY-MM-DD）的正则表达式
+func (g *RegexGenerator) isDatePattern(pattern string) bool {
+	return strings.Contains(pattern, "\\d{4}") && strings.Contains(pattern, "-") &&
+		(strings.Contains(pattern, "0[1-9]|1[0-2]") || strings.Contains(pattern, "\\d{2}"))
+}
+
+// generateDate 生成日期（YYYY-MM-DD）
+func (g *RegexGenerator) generateDate() string {
+	year := 2000 + rand.Intn(25)
+	month := 1 + rand.Intn(12)
+	daysInMonth := 28
+	if month == 2 {
+		daysInMonth = 28
+	} else if month == 4 || month == 6 || month == 9 || month == 11 {
+		daysInMonth = 30
+	} else if month == 1 || month == 3 || month == 5 || month == 7 || month == 8 || month == 10 || month == 12 {
+		daysInMonth = 31
+	}
+	day := 1 + rand.Intn(daysInMonth)
+	return fmt.Sprintf("%04d-%02d-%02d", year, month, day)
+}
+
+// isTimePattern 检查是否是时间（HH:MM:SS）的正则表达式
+func (g *RegexGenerator) isTimePattern(pattern string) bool {
+	return strings.Contains(pattern, ":") && (strings.Contains(pattern, "[01]\\d|2[0-3]") || strings.Contains(pattern, "\\d{2}"))
+}
+
+// generateTime 生成时间（HH:MM:SS）
+func (g *RegexGenerator) generateTime() string {
+	hour := rand.Intn(24)
+	minute := rand.Intn(60)
+	second := rand.Intn(60)
+	return fmt.Sprintf("%02d:%02d:%02d", hour, minute, second)
+}
+
+// isPostcodeCNPattern 检查是否是中国邮政编码的正则表达式
+func (g *RegexGenerator) isPostcodeCNPattern(pattern string) bool {
+	return strings.Contains(pattern, "[1-9]") && strings.Contains(pattern, "\\d{5}")
+}
+
+// generatePostcodeCN 生成中国邮政编码
+func (g *RegexGenerator) generatePostcodeCN() string {
+	// 中国邮政编码：1-9开头，6位数字
+	firstDigit := 1 + rand.Intn(9)
+	rest := fmt.Sprintf("%05d", rand.Intn(100000))
+	return fmt.Sprintf("%d%s", firstDigit, rest)
+}
+
+// generateByPatternStructure 根据正则表达式结构智能生成
+func (g *RegexGenerator) generateByPatternStructure(pattern string, re *regexp.Regexp) string {
+	// 尝试解析正则表达式的结构并生成
+	// 这是一个简化的实现，可以进一步优化
+
+	// 提取字符类
+	if strings.Contains(pattern, "[0-9]") || strings.Contains(pattern, "\\d") {
+		// 包含数字
+		if strings.Contains(pattern, "[A-Za-z]") || strings.Contains(pattern, "[a-z]") {
+			// 数字+字母
+			return g.generateMixedString(10)
+		}
+		// 纯数字
+		return g.generateNumericString(10)
+	}
+
+	// 提取长度限制
+	if strings.Contains(pattern, "{") {
+		// 尝试提取 {n} 或 {n,m} 格式
+		// 这里简化处理，使用固定长度
+		return generateRandomString(10)
+	}
+
+	return ""
 }
 
 type FunctionGenerator struct {
@@ -259,16 +688,45 @@ func NewFunctionGenerator() *FunctionGenerator {
 
 func (g *FunctionGenerator) Generate(rule *FieldRule, index int64) (interface{}, error) {
 	var config FunctionConfig
-	if err := unmarshalConfig(rule.Config, &config); err != nil {
-		return nil, err
+
+	// 优先从 map 中直接获取（更可靠）
+	if configMap, ok := rule.Config.(map[string]interface{}); ok {
+		// 尝试获取 func_name（下划线格式）
+		if funcName, ok := configMap["func_name"].(string); ok && funcName != "" {
+			config.FuncName = funcName
+		} else if funcName, ok := configMap["funcName"].(string); ok && funcName != "" {
+			// 尝试获取 funcName（驼峰格式）
+			config.FuncName = funcName
+		}
+
+		// 获取参数
+		if params, ok := configMap["params"].([]interface{}); ok {
+			config.Params = params
+		}
+	}
+
+	// 如果从 map 中获取失败，尝试使用 JSON 序列化/反序列化
+	if config.FuncName == "" {
+		if err := unmarshalConfig(rule.Config, &config); err != nil {
+			return nil, fmt.Errorf("解析函数配置失败: %w", err)
+		}
+	}
+
+	if config.FuncName == "" {
+		return nil, fmt.Errorf("函数名不能为空，配置: %+v", rule.Config)
 	}
 
 	fn, exists := g.funcs[config.FuncName]
 	if !exists {
-		return nil, fmt.Errorf("未知函数: %s", config.FuncName)
+		return nil, fmt.Errorf("未知函数: %s，可用函数: NOW, TODAY, UUID, RAND, RAND_INT, CONCAT", config.FuncName)
 	}
 
-	return fn(config.Params)
+	result, err := fn(config.Params)
+	if err != nil {
+		return nil, fmt.Errorf("执行函数 %s 失败: %w", config.FuncName, err)
+	}
+
+	return result, nil
 }
 
 func (g *FunctionGenerator) registerBuiltinFunctions() {

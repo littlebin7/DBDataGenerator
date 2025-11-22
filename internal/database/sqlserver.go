@@ -362,6 +362,18 @@ func (db *SQLServerDB) GetDBType() string {
 	return "mssql"
 }
 
+func (db *SQLServerDB) GetVersion() (string, error) {
+	if db.db == nil {
+		return "", fmt.Errorf("数据库未连接")
+	}
+	var version string
+	err := db.db.QueryRow("SELECT @@VERSION").Scan(&version)
+	if err != nil {
+		return "", fmt.Errorf("获取版本失败: %w", err)
+	}
+	return version, nil
+}
+
 func (db *SQLServerDB) ExecuteNonQuery(database, query string, args ...interface{}) (int64, error) {
 	result, err := db.db.Exec(query, args...)
 	if err != nil {

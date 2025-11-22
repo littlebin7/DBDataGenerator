@@ -1,26 +1,62 @@
 # 测试配置文件示例（可选，如果不想用环境变量）
-# 注意：不要提交包含真实密码的配置文件到版本控制
+# 注意：这是真实测试数据库配置，用于集成测试
 
+# ============================================
+# 默认测试数据库配置（用于 API 集成测试）
+# ============================================
 test_database:
   enabled: true
-  type: mysql  # mysql, postgres, sqlite
-  host: localhost
-  port: 3306
-  user: root
-  password: your_password  # 请替换为实际密码
-  database: test_dbdatagenerator
+  type: postgres  # mysql, postgres, sqlite
+  host: 192.168.1.174
+  port: 5433
+  user: postgres
+  password: postgres_password
+  database: postgres_db
 
-# 或者使用 PostgreSQL
+# MySQL 配置示例（可选）
 # test_database:
 #   enabled: true
-#   type: postgres
-#   host: localhost
-#   port: 5432
-#   user: postgres
-#   password: your_password
-#   database: test_dbdatagenerator
+#   type: mysql
+#   host: 192.168.1.174
+#   port: 3306
+#   user: mysql_user
+#   password: mysql_password
+#   database: mysql_db
 
-# SQLite 不需要连接信息
+# ============================================
+# 数据库模块测试配置 (internal/database)
+# ============================================
+
+# MySQL 测试配置
+mysql_test:
+  host: 192.168.1.174
+  port: 3306
+  user: mysql_user
+  password: mysql_password
+  database: mysql_db
+  charset: utf8mb4
+
+# MariaDB 测试配置
+mariadb_test:
+  host: 192.168.1.174
+  port: 3307
+  user: mariadb_user
+  password: mariadb_password
+  database: mariadb_db
+  charset: utf8mb4
+
+# PostgreSQL 测试配置
+postgres_test:
+  host: 192.168.1.174
+  port: 5433
+  user: postgres
+  password: postgres_password
+  database: postgres_db
+  sslmode: disable
+
+# ============================================
+# SQLite 配置示例（不需要连接信息）
+# ============================================
 # test_database:
 #   enabled: true
 #   type: sqlite

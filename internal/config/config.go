@@ -16,9 +16,11 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Host string `mapstructure:"host"`
-	Port int    `mapstructure:"port"`
-	Mode string `mapstructure:"mode"`
+	Host          string `mapstructure:"host"`
+	Port          int    `mapstructure:"port"`
+	Mode          string `mapstructure:"mode"`
+	DevMode       bool   `mapstructure:"dev_mode"`        // 开发模式：是否代理前端请求到 Vite 开发服务器
+	ViteDevServer string `mapstructure:"vite_dev_server"` // Vite 开发服务器地址
 }
 
 type DatabaseConfig struct {
@@ -81,6 +83,8 @@ func Load() (*Config, error) {
 	viper.SetDefault("server.host", "0.0.0.0")
 	viper.SetDefault("server.port", 8080)
 	viper.SetDefault("server.mode", "debug")
+	viper.SetDefault("server.dev_mode", false)
+	viper.SetDefault("server.vite_dev_server", "http://localhost:5173")
 	viper.SetDefault("database.max_connections", 10)
 	viper.SetDefault("database.connection_timeout", "30s")
 	viper.SetDefault("database.idle_timeout", "5m")

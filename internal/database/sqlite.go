@@ -328,6 +328,18 @@ func (db *SQLiteDB) GetDBType() string {
 	return "sqlite"
 }
 
+func (db *SQLiteDB) GetVersion() (string, error) {
+	if db.db == nil {
+		return "", fmt.Errorf("数据库未连接")
+	}
+	var version string
+	err := db.db.QueryRow("SELECT sqlite_version()").Scan(&version)
+	if err != nil {
+		return "", fmt.Errorf("获取版本失败: %w", err)
+	}
+	return "SQLite " + version, nil
+}
+
 func (db *SQLiteDB) ExecuteNonQuery(database, query string, args ...interface{}) (int64, error) {
 	result, err := db.db.Exec(query, args...)
 	if err != nil {

@@ -21,15 +21,36 @@ import (
 	"DBDataGenerator/internal/websocket"
 )
 
-// PostgreSQL 测试数据库配置
-var pgTestConfig = &database.ConnectionConfig{
-	Type:     "postgres",
-	Host:     "192.168.1.174",
-	Port:     5433,
-	User:     "postgres",
-	Password: "postgres123",
-	Database: "postgres",
+// getPostgresTestConfig 从环境变量获取 PostgreSQL 测试数据库配置
+func getPostgresTestConfig() *database.ConnectionConfig {
+	host := getEnvForPG("TEST_DB_HOST", "192.168.1.174")
+	port := 5433
+	if portStr := getEnvForPG("TEST_DB_PORT", ""); portStr != "" {
+		fmt.Sscanf(portStr, "%d", &port)
+	}
+	user := getEnvForPG("TEST_DB_USER", "postgres")
+	password := getEnvForPG("TEST_DB_PASSWORD", "postgres_password")
+	dbName := getEnvForPG("TEST_DB_NAME", "postgres_db")
+
+	return &database.ConnectionConfig{
+		Type:     "postgres",
+		Host:     host,
+		Port:     port,
+		User:     user,
+		Password: password,
+		Database: dbName,
+	}
 }
+
+func getEnvForPG(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+// pgTestConfig 保持向后兼容，但使用环境变量
+var pgTestConfig = getPostgresTestConfig()
 
 // setupTestHandlerWithPG 创建带 PostgreSQL 数据库的测试 Handler
 func setupTestHandlerWithPG(t *testing.T) (*Handler, *gin.Engine, string, func()) {
@@ -103,13 +124,15 @@ func TestPG_Connection(t *testing.T) {
 	_, router, _, cleanup := setupTestHandlerWithPG(t)
 	defer cleanup()
 
+	// 从环境变量获取配置
+	pgConfig := getPostgresTestConfig()
 	reqBody := map[string]interface{}{
 		"type":     "postgres",
-		"host":     "192.168.1.174",
-		"port":     5433,
-		"user":     "postgres",
-		"password": "postgres123",
-		"database": "postgres",
+		"host":     pgConfig.Host,
+		"port":     pgConfig.Port,
+		"user":     pgConfig.User,
+		"password": pgConfig.Password,
+		"database": pgConfig.Database,
 	}
 
 	body, _ := json.Marshal(reqBody)
@@ -150,8 +173,9 @@ func TestPG_GetTables(t *testing.T) {
 	_, router, connID, cleanup := setupTestHandlerWithPG(t)
 	defer cleanup()
 
+	pgConfig := getPostgresTestConfig()
 	req := httptest.NewRequest("GET",
-		fmt.Sprintf("/api/tables?connection_id=%s&database=postgres", connID), nil)
+		fmt.Sprintf("/api/tables?connection_id=%s&database=%s", connID, pgConfig.Database), nil)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -173,10 +197,11 @@ func TestPG_GetTableSchema(t *testing.T) {
 	defer cleanup()
 
 	// 先创建测试表
-	createTestTable(t, handler, connID, "postgres", "test_schema_table")
+	pgConfig := getPostgresTestConfig()
+	createTestTable(t, handler, connID, pgConfig.Database, "test_schema_table")
 
 	req := httptest.NewRequest("GET",
-		fmt.Sprintf("/api/table/test_schema_table/schema?connection_id=%s&database=postgres", connID), nil)
+		fmt.Sprintf("/api/table/test_schema_table/schema?connection_id=%s&database=%s", connID, pgConfig.Database), nil)
 	w := httptest.NewRecorder()
 
 	router.ServeHTTP(w, req)
@@ -194,9 +219,10 @@ func TestPG_GetTableSchema(t *testing.T) {
 
 // createTestTaskConfig 创建测试任务配置的辅助函数
 func createTestTaskConfig(tableName string, count int64) *generator.TableConfig {
+	pgConfig := getPostgresTestConfig()
 	return &generator.TableConfig{
 		TableName: tableName,
-		Database:  "postgres",
+		Database:  pgConfig.Database,
 		TotalRows: count,
 		FieldRules: []generator.FieldRule{
 			{
@@ -367,9 +393,10 @@ func TestPG_PreviewData(t *testing.T) {
 
 	taskConfig := createTestTaskConfig(tableName, 5)
 
+	pgConfig := getPostgresTestConfig()
 	previewBody, _ := json.Marshal(map[string]interface{}{
 		"connection_id": connID,
-		"database":      "postgres",
+		"database":      pgConfig.Database,
 		"table_name":    tableName,
 		"config":        taskConfig,
 	})

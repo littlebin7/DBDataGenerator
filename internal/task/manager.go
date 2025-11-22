@@ -22,6 +22,7 @@ type Manager struct {
 	connMgr        database.ConnectionManagerInterface
 	wsHub          interface{ Broadcast(message interface{}) } // WebSocket Hub接口
 	historyManager *HistoryManager                             // 历史管理器
+	persistence    *TaskPersistence                            // 任务持久化管理器
 }
 
 // taskPushState 任务推送状态（用于去重）
@@ -53,6 +54,13 @@ func (m *Manager) SetHistoryManager(hm *HistoryManager) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.historyManager = hm
+}
+
+// SetPersistence 设置持久化管理器
+func (m *Manager) SetPersistence(p *TaskPersistence) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.persistence = p
 }
 
 // SetWebSocketHub 设置WebSocket Hub
@@ -168,6 +176,10 @@ func (m *Manager) CreateTask(name, connectionID string, config *generator.TableC
 	}
 
 	m.tasks[task.ID] = task
+
+	// 保存到数据库
+	m.saveTaskToDB(task)
+
 	return task, nil
 }
 
@@ -217,7 +229,86 @@ func (m *Manager) DeleteTask(taskID string) error {
 	}
 
 	delete(m.tasks, taskID)
+
+	// 从数据库删除
+	if m.persistence != nil {
+		go func() {
+			_ = m.persistence.DeleteTask(taskID)
+		}()
+	}
+
 	return nil
+}
+
+// LoadTasks 从数据库加载任务
+func (m *Manager) LoadTasks() error {
+	if m.persistence == nil {
+		return nil
+	}
+
+	tasks, err := m.persistence.LoadTasks()
+	if err != nil {
+		return err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	now := time.Now()
+	for _, task := range tasks {
+		// 如果任务状态是 running 或 paused，但服务已重启，这些任务实际上已经不在运行了
+		// 需要将它们重置为 stopped 状态
+		if task.Status == TaskStatusRunning || task.Status == TaskStatusPaused {
+			// 检查任务是否有结束时间，如果没有且开始时间超过一定时间（比如1小时），认为任务已停止
+			if task.EndTime == nil {
+				if task.StartTime != nil {
+					// 如果开始时间超过1小时，认为任务已停止
+					if time.Since(*task.StartTime) > time.Hour {
+						task.Status = TaskStatusStopped
+						task.EndTime = &now
+						// 异步保存状态
+						go func(t *Task) {
+							m.saveTaskToDB(t)
+							m.saveTaskHistory(t)
+						}(task)
+					} else {
+						// 开始时间在1小时内，重置为 stopped（因为服务重启，任务实际上已停止）
+						task.Status = TaskStatusStopped
+						task.EndTime = &now
+						// 异步保存状态
+						go func(t *Task) {
+							m.saveTaskToDB(t)
+							m.saveTaskHistory(t)
+						}(task)
+					}
+				} else {
+					// 没有开始时间，直接重置为 stopped
+					task.Status = TaskStatusStopped
+					task.EndTime = &now
+					// 异步保存状态
+					go func(t *Task) {
+						m.saveTaskToDB(t)
+						m.saveTaskHistory(t)
+					}(task)
+				}
+			}
+		}
+
+		m.tasks[task.ID] = task
+	}
+
+	return nil
+}
+
+// saveTaskToDB 保存任务到数据库（异步）
+func (m *Manager) saveTaskToDB(task *Task) {
+	if m.persistence != nil {
+		go func() {
+			if err := m.persistence.SaveTask(task); err != nil {
+				// 记录错误但不影响主流程
+			}
+		}()
+	}
 }
 
 // SetThreadCount 设置线程数
@@ -240,6 +331,57 @@ func (m *Manager) SetThreadCount(taskID string, count int) error {
 	return nil
 }
 
+// RetryTask 重试任务（重置状态并重新启动）
+func (m *Manager) RetryTask(taskID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	task, exists := m.tasks[taskID]
+	if !exists {
+		return fmt.Errorf("任务不存在: %s", taskID)
+	}
+
+	// 只有错误或已停止的任务可以重试
+	if task.Status != TaskStatusError && task.Status != TaskStatusStopped {
+		return fmt.Errorf("只有失败或已停止的任务可以重试")
+	}
+
+	// 如果任务正在运行，先停止
+	if pool, exists := m.pools[taskID]; exists {
+		pool.Stop()
+		delete(m.pools, taskID)
+	}
+
+	// 停止监控协程
+	if stopChan, exists := m.monitors[taskID]; exists {
+		close(stopChan)
+		delete(m.monitors, taskID)
+	}
+
+	// 重置任务状态
+	task.mu.Lock()
+	task.Status = TaskStatusPending
+	task.GeneratedRows = 0
+	task.SuccessRows = 0
+	task.FailedRows = 0
+	task.Progress = 0
+	task.Speed = 0
+	task.ETA = 0
+	task.Error = ""
+	task.StartTime = nil
+	task.EndTime = nil
+	task.mu.Unlock()
+
+	m.saveTaskToDB(task)
+
+	// 解锁后启动任务
+	m.mu.Unlock()
+	err := m.StartTask(taskID)
+	m.mu.Lock()
+
+	return err
+}
+
 // StartTask 启动任务
 func (m *Manager) StartTask(taskID string) error {
 	m.mu.Lock()
@@ -257,11 +399,29 @@ func (m *Manager) StartTask(taskID string) error {
 	// 获取任务关联的数据库连接
 	conn, err := m.connMgr.GetConnection(task.ConnectionID)
 	if err != nil {
-		return fmt.Errorf("获取数据库连接失败: %w", err)
+		return fmt.Errorf("获取数据库连接失败，请检查连接配置: %w", err)
 	}
 
+	// 如果数据库未连接，自动尝试连接
 	if conn.Database == nil {
-		return fmt.Errorf("数据库连接未建立")
+		// 检查连接管理器是否支持 Reconnect 方法
+		if reconnectMgr, ok := m.connMgr.(interface {
+			Reconnect(connID string) error
+		}); ok {
+			if err := reconnectMgr.Reconnect(task.ConnectionID); err != nil {
+				return fmt.Errorf("自动连接数据库失败: %w", err)
+			}
+			// 重新获取连接（连接后需要重新获取）
+			conn, err = m.connMgr.GetConnection(task.ConnectionID)
+			if err != nil {
+				return fmt.Errorf("获取数据库连接失败: %w", err)
+			}
+			if conn.Database == nil {
+				return fmt.Errorf("数据库连接失败，连接ID: %s", task.ConnectionID)
+			}
+		} else {
+			return fmt.Errorf("数据库连接未建立，请先连接到数据库。连接ID: %s", task.ConnectionID)
+		}
 	}
 
 	// 创建生成引擎
@@ -273,11 +433,13 @@ func (m *Manager) StartTask(taskID string) error {
 
 	// 设置任务更新回调
 	pool.SetUpdateCallback(func(t *Task) {
+		m.saveTaskToDB(t)
 		m.broadcastTaskUpdate(t)
 	})
 
 	// 设置任务完成回调
 	pool.SetCompleteCallback(func(t *Task) {
+		m.saveTaskToDB(t)
 		m.broadcastTaskUpdate(t)
 		m.saveTaskHistory(t)
 	})
@@ -289,6 +451,7 @@ func (m *Manager) StartTask(taskID string) error {
 	now := time.Now()
 	task.StartTime = &now
 	task.SetStatus(TaskStatusRunning)
+	m.saveTaskToDB(task)
 
 	// 启动数据生成
 	go m.runTask(taskID, pool)
@@ -318,6 +481,7 @@ func (m *Manager) PauseTask(taskID string) error {
 	if pool, exists := m.pools[taskID]; exists {
 		pool.Pause()
 		task.SetStatus(TaskStatusPaused)
+		m.saveTaskToDB(task)
 		m.broadcastTaskUpdate(task)
 	}
 
@@ -341,6 +505,7 @@ func (m *Manager) ResumeTask(taskID string) error {
 	if pool, exists := m.pools[taskID]; exists {
 		pool.Resume()
 		task.SetStatus(TaskStatusRunning)
+		m.saveTaskToDB(task)
 		m.broadcastTaskUpdate(task)
 	}
 
@@ -350,21 +515,41 @@ func (m *Manager) ResumeTask(taskID string) error {
 // StopTask 停止任务
 func (m *Manager) StopTask(taskID string) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 
 	task, exists := m.tasks[taskID]
 	if !exists {
+		m.mu.Unlock()
 		return fmt.Errorf("任务不存在: %s", taskID)
 	}
 
-	if pool, exists := m.pools[taskID]; exists {
-		pool.Stop()
+	// 检查任务状态，如果已经是停止状态，直接返回
+	currentStatus := task.GetStatus()
+	if currentStatus == TaskStatusStopped || currentStatus == TaskStatusCompleted || currentStatus == TaskStatusError {
+		m.mu.Unlock()
+		return nil // 任务已经停止，无需重复操作
+	}
+
+	// 先更新状态，立即返回响应
+	now := time.Now()
+	task.EndTime = &now
+	task.SetStatus(TaskStatusStopped)
+
+	// 停止协程池（如果存在）
+	var pool *WorkerPool
+	if p, exists := m.pools[taskID]; exists {
+		pool = p
 		delete(m.pools, taskID)
 	}
 
 	// 停止监控协程
 	if stopChan, exists := m.monitors[taskID]; exists {
-		close(stopChan)
+		// 使用 select 避免关闭已关闭的通道
+		select {
+		case <-stopChan:
+			// 已经关闭
+		default:
+			close(stopChan)
+		}
 		delete(m.monitors, taskID)
 	}
 
@@ -372,11 +557,39 @@ func (m *Manager) StopTask(taskID string) error {
 	delete(m.lastPushState, taskID)
 	delete(m.lastPushTime, taskID)
 
-	now := time.Now()
-	task.EndTime = &now
-	task.SetStatus(TaskStatusStopped)
+	// 立即广播状态更新
 	m.broadcastTaskUpdate(task)
-	m.saveTaskHistory(task)
+
+	// 解锁后再执行可能较慢的操作
+	m.mu.Unlock()
+
+	// 异步停止协程池（带超时保护）
+	if pool != nil {
+		go func() {
+			defer func() {
+				// 捕获可能的 panic，防止影响其他任务
+				if r := recover(); r != nil {
+					// 静默处理，避免影响任务停止流程
+					_ = r
+				}
+			}()
+			// 使用超时停止，防止无限等待
+			pool.StopWithTimeout(5 * time.Second)
+		}()
+	}
+
+	// 异步保存到数据库和历史记录（不阻塞响应）
+	go func() {
+		defer func() {
+			// 捕获可能的 panic，防止影响任务停止流程
+			if r := recover(); r != nil {
+				// 静默处理
+				_ = r
+			}
+		}()
+		m.saveTaskToDB(task)
+		m.saveTaskHistory(task)
+	}()
 
 	return nil
 }
@@ -435,14 +648,17 @@ func (m *Manager) monitorTaskProgress(taskID string, stopChan chan struct{}) {
 			if task.Status == TaskStatusRunning || task.Status == TaskStatusPaused {
 				m.broadcastTaskUpdate(task)
 			} else {
-				// 任务完成或停止，最后推送一次并退出（状态变化必须推送）
+				// 任务完成、停止或错误，最后推送一次并退出（状态变化必须推送）
 				m.broadcastTaskUpdate(task)
 				// 清理推送状态缓存
 				m.mu.Lock()
 				delete(m.lastPushState, taskID)
 				delete(m.lastPushTime, taskID)
 				m.mu.Unlock()
-				// 注意：历史记录已通过完成回调保存，这里不需要重复保存
+				// 如果任务完成或错误，保存历史（停止任务已在 StopTask 中保存）
+				if task.Status == TaskStatusCompleted || task.Status == TaskStatusError {
+					m.saveTaskHistory(task)
+				}
 				return
 			}
 		}

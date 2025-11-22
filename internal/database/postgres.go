@@ -70,6 +70,9 @@ func (db *PostgresDB) TestConnection() error {
 }
 
 func (db *PostgresDB) GetDatabases() ([]string, error) {
+	if db.pool == nil {
+		return nil, fmt.Errorf("数据库未连接")
+	}
 	query := "SELECT datname FROM pg_database WHERE datistemplate = false"
 	rows, err := db.pool.Query(context.Background(), query)
 	if err != nil {
@@ -89,6 +92,9 @@ func (db *PostgresDB) GetDatabases() ([]string, error) {
 }
 
 func (db *PostgresDB) GetTables(database string) ([]string, error) {
+	if db.pool == nil {
+		return nil, fmt.Errorf("数据库未连接")
+	}
 	query := `
 		SELECT table_name 
 		FROM information_schema.tables 
@@ -114,6 +120,9 @@ func (db *PostgresDB) GetTables(database string) ([]string, error) {
 }
 
 func (db *PostgresDB) GetTableSchema(database, table string) (*TableSchema, error) {
+	if db.pool == nil {
+		return nil, fmt.Errorf("数据库未连接")
+	}
 	// 获取字段信息
 	query := `
 		SELECT 
@@ -152,6 +161,7 @@ func (db *PostgresDB) GetTableSchema(database, table string) (*TableSchema, erro
 		var field FieldInfo
 		var maxLength, precision, scale *int
 		var isPk, isUnique bool
+		var isNullableStr string // PostgreSQL 的 is_nullable 返回字符串 'YES'/'NO'
 
 		err := rows.Scan(
 			&field.Name,
@@ -159,7 +169,7 @@ func (db *PostgresDB) GetTableSchema(database, table string) (*TableSchema, erro
 			&maxLength,
 			&precision,
 			&scale,
-			&field.IsNullable,
+			&isNullableStr, // 先扫描为字符串
 			&field.DefaultValue,
 			&isPk,
 			&isUnique,
@@ -167,6 +177,9 @@ func (db *PostgresDB) GetTableSchema(database, table string) (*TableSchema, erro
 		if err != nil {
 			return nil, err
 		}
+
+		// 将 'YES'/'NO' 转换为 bool
+		field.IsNullable = isNullableStr == "YES"
 
 		field.IsPrimaryKey = isPk
 		field.IsUnique = isUnique
@@ -347,6 +360,20 @@ func (db *PostgresDB) ExecuteQuery(database, query string, args ...interface{}) 
 
 func (db *PostgresDB) GetDBType() string {
 	return "postgres"
+}
+
+func (db *PostgresDB) GetVersion() (string, error) {
+	if db.pool == nil {
+		return "", fmt.Errorf("数据库未连接")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	var version string
+	err := db.pool.QueryRow(ctx, "SELECT version()").Scan(&version)
+	if err != nil {
+		return "", fmt.Errorf("获取版本失败: %w", err)
+	}
+	return version, nil
 }
 
 func (db *PostgresDB) ExecuteNonQuery(database, query string, args ...interface{}) (int64, error) {

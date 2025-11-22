@@ -1,99 +1,140 @@
-version: '3.8'
-
 services:
-  # PostgreSQL 测试数据库
+  mariadb:
+    image: mariadb:latest
+    container_name: mariadb
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: mariadb_db
+      MYSQL_USER: mariadb_user
+      MYSQL_PASSWORD: mariadb_password
+    ports:
+      - "3307:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    networks:
+      - db_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  mysql:
+    image: mysql:latest
+    container_name: mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: mysql_db
+      MYSQL_USER: mysql_user
+      MYSQL_PASSWORD: mysql_password
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - db_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   postgres:
-    image: postgres:15-alpine
-    container_name: dbdata-postgres-test
+    image: postgres:latest
+    container_name: postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres123
-      POSTGRES_DB: postgres
-      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_PASSWORD: postgres_password
+      POSTGRES_DB: postgres_db
     ports:
-      - "5433:5432"  # 映射到 5433 端口，与测试配置匹配
+      - "5433:5432"
     volumes:
-      - postgres_test_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     networks:
-      - dbdata-test-network
+      - db_network
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
-    command:
-      - "postgres"
-      - "-c"
-      - "max_connections=200"
-      - "-c"
-      - "shared_buffers=256MB"
 
-  # MySQL 测试数据库（可选）
-  mysql:
-    image: mysql:8.0
-    container_name: dbdata-mysql-test
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
     environment:
-      MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: testdb
-      MYSQL_USER: mysqluser
-      MYSQL_PASSWORD: mysql123
-      TZ: Asia/Shanghai
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: mongodb_password
+      MONGO_INITDB_DATABASE: mongodb_db
     ports:
-      - "3306:3306"
+      - "27017:27017"
     volumes:
-      - mysql_test_data:/var/lib/mysql
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
     networks:
-      - dbdata-test-network
-    command: 
-      - "--default-authentication-plugin=mysql_native_password"
-      - "--character-set-server=utf8mb4"
-      - "--collation-server=utf8mb4_unicode_ci"
-      - "--max-connections=200"
+      - db_network
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot123"]
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
 
-  # MariaDB 测试数据库（可选）
-  mariadb:
-    image: mariadb:10.11
-    container_name: dbdata-mariadb-test
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: sqlserver
     environment:
-      MYSQL_ROOT_PASSWORD: root123
-      MYSQL_DATABASE: testdb
-      MYSQL_USER: mariadbuser
-      MYSQL_PASSWORD: mariadb123
-      TZ: Asia/Shanghai
+      ACCEPT_EULA: "Y"
+      SA_PASSWORD: "SqlServer_123456"
+      MSSQL_PID: "Developer"
     ports:
-      - "3307:3306"
+      - "1433:1433"
     volumes:
-      - mariadb_test_data:/var/lib/mysql
+      - sqlserver_data:/var/opt/mssql
     networks:
-      - dbdata-test-network
-    command: 
-      - "--character-set-server=utf8mb4"
-      - "--collation-server=utf8mb4_unicode_ci"
-      - "--max-connections=200"
+      - db_network
+    restart: unless-stopped
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot123"]
+      test: ["CMD-SHELL", "/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P SqlServer_123456 -Q 'SELECT 1' || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
-    restart: unless-stopped
 
-  # SQLite 使用文件，无需容器
+  redis:
+    image: redis:latest
+    container_name: redis
+    command: redis-server --requirepass redis_password
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - db_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
-  postgres_test_data:
+  mariadb_data:
     driver: local
-  mysql_test_data:
+  mysql_data:
     driver: local
-  mariadb_test_data:
+  postgres_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local
+  sqlserver_data:
+    driver: local
+  redis_data:
     driver: local
 
 networks:
-  dbdata-test-network:
+  db_network:
     driver: bridge

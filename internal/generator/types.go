@@ -12,6 +12,9 @@ type FieldRule struct {
 	IsUnique     bool        `json:"is_unique"`      // 是否唯一
 	IsNullable   bool        `json:"is_nullable"`    // 是否可空
 	DefaultValue interface{} `json:"default_value"`  // 默认值
+	MaxLength    int         `json:"max_length"`     // 最大长度（字符串类型）
+	Precision    int         `json:"precision"`      // 精度（数字类型）
+	Scale        int         `json:"scale"`          // 小数位数（数字类型）
 }
 
 // TableConfig 表生成配置

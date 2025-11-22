@@ -67,3 +67,7 @@ func (db *DamengDB) GetDBType() string {
 func (db *DamengDB) ExecuteNonQuery(database, query string, args ...interface{}) (int64, error) {
 	return 0, fmt.Errorf("达梦数据库在此平台不支持")
 }
+
+func (db *DamengDB) GetVersion() (string, error) {
+	return "", fmt.Errorf("达梦数据库在此平台不支持")
+}

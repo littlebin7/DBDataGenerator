@@ -62,5 +62,5 @@ func (h *Handler) PreviewData(c *gin.Context) {
 	}
 
 	h.logger.Info("预览数据生成成功", zap.Int("count", len(previewData)))
-	h.sendSuccess(c, gin.H{"data": previewData})
+	h.sendSuccess(c, gin.H{"data": previewData, "count": len(previewData)})
 }

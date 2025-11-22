@@ -56,6 +56,9 @@ func (db *MySQLDB) TestConnection() error {
 }
 
 func (db *MySQLDB) GetDatabases() ([]string, error) {
+	if db.db == nil {
+		return nil, fmt.Errorf("数据库未连接")
+	}
 	rows, err := db.db.Query("SHOW DATABASES")
 	if err != nil {
 		return nil, err
@@ -77,6 +80,9 @@ func (db *MySQLDB) GetDatabases() ([]string, error) {
 }
 
 func (db *MySQLDB) GetTables(database string) ([]string, error) {
+	if db.db == nil {
+		return nil, fmt.Errorf("数据库未连接")
+	}
 	query := "SHOW TABLES"
 	rows, err := db.db.Query(query)
 	if err != nil {
@@ -96,6 +102,9 @@ func (db *MySQLDB) GetTables(database string) ([]string, error) {
 }
 
 func (db *MySQLDB) GetTableSchema(database, table string) (*TableSchema, error) {
+	if db.db == nil {
+		return nil, fmt.Errorf("数据库未连接")
+	}
 	query := fmt.Sprintf("DESCRIBE `%s`", table)
 	rows, err := db.db.Query(query)
 	if err != nil {
@@ -289,6 +298,18 @@ func (db *MySQLDB) GetDBType() string {
 		return "mariadb"
 	}
 	return "mysql"
+}
+
+func (db *MySQLDB) GetVersion() (string, error) {
+	if db.db == nil {
+		return "", fmt.Errorf("数据库未连接")
+	}
+	var version string
+	err := db.db.QueryRow("SELECT VERSION()").Scan(&version)
+	if err != nil {
+		return "", fmt.Errorf("获取版本失败: %w", err)
+	}
+	return version, nil
 }
 
 func (db *MySQLDB) ExecuteNonQuery(database, query string, args ...interface{}) (int64, error) {

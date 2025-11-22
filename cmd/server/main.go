@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -132,60 +134,112 @@ func main() {
 		wsHub.HandleWebSocket(c.Writer, c.Request)
 	})
 
-	// 静态文件服务（前端）
-	// 检查前端文件是否存在
+	// 检查是否为开发模式（优先使用配置文件，环境变量作为备选）
+	devMode := cfg.Server.DevMode
+	if !devMode {
+		// 如果配置文件中未启用，检查环境变量（向后兼容）
+		devMode = os.Getenv("DEV_MODE") == "true" || os.Getenv("DEV") == "true"
+	}
+
+	viteDevServer := cfg.Server.ViteDevServer
+	if viteDevServer == "" {
+		// 如果配置文件中未设置，检查环境变量（向后兼容）
+		viteDevServer = os.Getenv("VITE_DEV_SERVER")
+		if viteDevServer == "" {
+			viteDevServer = "http://localhost:5173" // 默认值
+		}
+	}
+
 	indexPath := "./web/dist/index.html"
-	if _, err := os.Stat(indexPath); os.IsNotExist(err) {
-		logger.Warn("前端文件不存在，请先构建前端",
-			zap.String("path", indexPath),
-			zap.String("hint", "运行: cd web && npm run build"),
-		)
-	} else {
+	hasFrontendFiles := false
+	if _, err := os.Stat(indexPath); err == nil {
+		hasFrontendFiles = true
 		logger.Info("前端文件已找到", zap.String("path", indexPath))
 	}
 
-	// 先设置静态资源（JS、CSS、图片等）
-	router.Static("/assets", "./web/dist/assets")
-	router.StaticFile("/favicon.ico", "./web/dist/favicon.ico")
+	// 开发模式：代理到 Vite 开发服务器
+	if devMode {
+		logger.Info("开发模式已启用，前端请求将代理到 Vite 开发服务器",
+			zap.String("vite_server", viteDevServer),
+			zap.String("hint", "请确保 Vite 开发服务器正在运行: cd web && npm run dev"),
+		)
 
-	// 根路径直接返回 index.html
-	router.GET("/", func(c *gin.Context) {
-		if _, err := os.Stat(indexPath); os.IsNotExist(err) {
-			logger.Error("前端文件不存在", zap.String("path", indexPath))
-			c.String(http.StatusInternalServerError,
-				"前端文件未找到，请先运行: cd web && npm run build")
-			return
+		// 创建反向代理
+		viteURL, err := url.Parse(viteDevServer)
+		if err != nil {
+			logger.Fatal("解析 Vite 开发服务器地址失败", zap.Error(err))
 		}
-		c.File(indexPath)
-	})
+		proxy := httputil.NewSingleHostReverseProxy(viteURL)
 
-	// SPA 路由：所有非 API、非 WebSocket、非静态资源的请求都返回 index.html
-	router.NoRoute(func(c *gin.Context) {
-		path := c.Request.URL.Path
-		// 如果是 API 请求，返回 404
-		if len(path) >= 4 && path[:4] == "/api" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
-			return
+		// 代理所有非 API、非 WebSocket 的请求到 Vite 开发服务器
+		router.NoRoute(func(c *gin.Context) {
+			path := c.Request.URL.Path
+			// API 请求不代理
+			if len(path) >= 4 && path[:4] == "/api" {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+				return
+			}
+			// WebSocket 请求不代理
+			if len(path) >= 3 && path[:3] == "/ws" {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+				return
+			}
+			// 其他请求代理到 Vite 开发服务器
+			proxy.ServeHTTP(c.Writer, c.Request)
+		})
+	} else {
+		// 生产模式：使用静态文件
+		if !hasFrontendFiles {
+			logger.Warn("前端文件不存在，请先构建前端",
+				zap.String("path", indexPath),
+				zap.String("hint", "运行: cd web && npm run build"),
+				zap.String("dev_mode_hint", "或设置环境变量 DEV_MODE=true 启用开发模式"),
+			)
 		}
-		// 如果是 WebSocket 请求，返回 404
-		if len(path) >= 3 && path[:3] == "/ws" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
-			return
-		}
-		// 如果是静态资源请求，返回 404（应该已经被上面的 Static 处理了）
-		if len(path) >= 7 && path[:7] == "/assets" {
-			c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
-			return
-		}
-		// 其他请求返回 index.html（支持前端路由）
-		if _, err := os.Stat(indexPath); os.IsNotExist(err) {
-			logger.Error("前端文件不存在", zap.String("path", indexPath))
-			c.String(http.StatusInternalServerError,
-				"前端文件未找到，请先运行: cd web && npm run build")
-			return
-		}
-		c.File(indexPath)
-	})
+
+		// 先设置静态资源（JS、CSS、图片等）
+		router.Static("/assets", "./web/dist/assets")
+		router.StaticFile("/favicon.ico", "./web/dist/favicon.ico")
+
+		// 根路径直接返回 index.html
+		router.GET("/", func(c *gin.Context) {
+			if !hasFrontendFiles {
+				logger.Error("前端文件不存在", zap.String("path", indexPath))
+				c.String(http.StatusInternalServerError,
+					"前端文件未找到，请先运行: cd web && npm run build\n或设置环境变量 DEV_MODE=true 启用开发模式")
+				return
+			}
+			c.File(indexPath)
+		})
+
+		// SPA 路由：所有非 API、非 WebSocket、非静态资源的请求都返回 index.html
+		router.NoRoute(func(c *gin.Context) {
+			path := c.Request.URL.Path
+			// 如果是 API 请求，返回 404
+			if len(path) >= 4 && path[:4] == "/api" {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+				return
+			}
+			// 如果是 WebSocket 请求，返回 404
+			if len(path) >= 3 && path[:3] == "/ws" {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+				return
+			}
+			// 如果是静态资源请求，返回 404（应该已经被上面的 Static 处理了）
+			if len(path) >= 7 && path[:7] == "/assets" {
+				c.JSON(http.StatusNotFound, gin.H{"error": "Not found"})
+				return
+			}
+			// 其他请求返回 index.html（支持前端路由）
+			if !hasFrontendFiles {
+				logger.Error("前端文件不存在", zap.String("path", indexPath))
+				c.String(http.StatusInternalServerError,
+					"前端文件未找到，请先运行: cd web && npm run build\n或设置环境变量 DEV_MODE=true 启用开发模式")
+				return
+			}
+			c.File(indexPath)
+		})
+	}
 
 	// 创建 HTTP 服务器
 	srv := &http.Server{
@@ -204,6 +258,7 @@ func main() {
 			zap.String("host", cfg.Server.Host),
 			zap.Int("port", cfg.Server.Port),
 			zap.String("url", addr),
+			zap.Bool("dev_mode", devMode),
 		)
 
 		// 输出访问地址到控制台
@@ -212,6 +267,13 @@ func main() {
 		fmt.Println("  数据库造数工具 - 服务已启动")
 		fmt.Println("========================================")
 		fmt.Printf("  访问地址: %s\n", addr)
+		if devMode {
+			fmt.Printf("  开发模式: 已启用（前端代理到 %s）\n", viteDevServer)
+			fmt.Println("  提示: 请确保 Vite 开发服务器正在运行")
+			fmt.Println("  启动命令: cd web && npm run dev")
+		} else {
+			fmt.Println("  模式: 生产模式（使用静态文件）")
+		}
 		fmt.Println("  按 Ctrl+C 停止服务")
 		fmt.Println("========================================")
 		fmt.Println("")

@@ -20,11 +20,12 @@ type ConnectionManager struct {
 
 // ConnectionInfo 连接信息
 type ConnectionInfo struct {
-	ID       string            `json:"id"`
-	Name     string            `json:"name"`
-	Config   *ConnectionConfig `json:"config"`
-	Database Database          `json:"-"` // 不序列化
-	IsActive bool              `json:"is_active"`
+	ID        string            `json:"id"`
+	Name      string            `json:"name"`
+	Config    *ConnectionConfig `json:"config"`
+	Database  Database          `json:"-"` // 不序列化
+	IsActive  bool              `json:"is_active"`
+	Connected bool              `json:"connected"` // 连接状态（是否已建立连接）
 }
 
 // ConnectionManager 连接管理器接口
@@ -107,10 +108,11 @@ func (cm *ConnectionManager) GetAllConnections() []*ConnectionInfo {
 	for _, conn := range cm.connections {
 		// 创建副本，不包含 Database 对象
 		connCopy := &ConnectionInfo{
-			ID:       conn.ID,
-			Name:     conn.Name,
-			Config:   conn.Config,
-			IsActive: conn.IsActive,
+			ID:        conn.ID,
+			Name:      conn.Name,
+			Config:    conn.Config,
+			IsActive:  conn.IsActive,
+			Connected: conn.Database != nil, // 根据 Database 是否为 nil 判断连接状态
 		}
 		connections = append(connections, connCopy)
 	}

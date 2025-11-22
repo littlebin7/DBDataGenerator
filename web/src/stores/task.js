@@ -82,6 +82,17 @@ export const useTaskStore = defineStore('task', {
       }
     },
 
+    // 重试任务
+    async retryTask(taskId) {
+      try {
+        await api.retryTask(taskId)
+        await this.loadTasks()
+      } catch (error) {
+        console.error('重试任务失败:', error)
+        throw error
+      }
+    },
+
     // 暂停任务
     async pauseTask(taskId) {
       try {

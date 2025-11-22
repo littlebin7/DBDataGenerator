@@ -26,6 +26,8 @@ go.work.sum
 
 # env file
 .env
+test_database_config.env
+test_database_config.sh
 
 # connection config
 connections.json

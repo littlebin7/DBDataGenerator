@@ -2,14 +2,14 @@ package database
 
 // ConnectionConfig 数据库连接配置
 type ConnectionConfig struct {
-	Type     string // postgres/mysql/mariadb/dameng/sqlite/mssql/oracle
-	Host     string
-	Port     int
-	User     string
-	Password string
-	Database string
-	SSLMode  string // PostgreSQL 使用
-	Charset  string // MySQL/MariaDB 使用
+	Type     string `json:"type"` // postgres/mysql/mariadb/dameng/sqlite/mssql/oracle
+	Host     string `json:"host"`
+	Port     int    `json:"port"`
+	User     string `json:"user"`
+	Password string `json:"password"`
+	Database string `json:"database"`
+	SSLMode  string `json:"ssl_mode"` // PostgreSQL 使用
+	Charset  string `json:"charset"`  // MySQL/MariaDB 使用
 	// SQLite: Database 字段作为文件路径
 	// SQL Server: 支持 Windows 认证（Integrated Security）
 	// Oracle: 支持 TNS 连接字符串
@@ -55,27 +55,32 @@ type Database interface {
 
 	// ExecuteNonQuery 执行非查询 SQL（INSERT/UPDATE/DELETE）并返回受影响的行数
 	ExecuteNonQuery(database, query string, args ...interface{}) (int64, error)
+
+	// GetVersion 获取数据库版本信息
+	GetVersion() (string, error)
 }
 
 // TableSchema 表结构
 type TableSchema struct {
-	TableName string
-	Fields    []FieldInfo
+	TableName    string      `json:"table_name"`
+	TableComment string      `json:"table_comment"` // 表注释
+	Fields       []FieldInfo `json:"fields"`
 }
 
 // FieldInfo 字段信息
 type FieldInfo struct {
-	Name         string      // 字段名
-	Type         string      // 字段类型（数据库原生类型）
-	GoType       string      // Go 类型映射
-	IsPrimaryKey bool        // 是否主键
-	IsForeignKey bool        // 是否外键
-	ForeignTable string      // 外键关联表
-	IsUnique     bool        // 是否唯一
-	IsNullable   bool        // 是否可空
-	DefaultValue interface{} // 默认值
-	MaxLength    int         // 最大长度（字符串类型）
-	Precision    int         // 精度（数字类型）
-	Scale        int         // 小数位数
-	EnumValues   []string    // 枚举值（ENUM 类型）
+	Name         string      `json:"name"`           // 字段名
+	Type         string      `json:"type"`           // 字段类型（数据库原生类型）
+	GoType       string      `json:"go_type"`        // Go 类型映射
+	IsPrimaryKey bool        `json:"is_primary_key"` // 是否主键
+	IsForeignKey bool        `json:"is_foreign_key"` // 是否外键
+	ForeignTable string      `json:"foreign_table"`  // 外键关联表
+	IsUnique     bool        `json:"is_unique"`      // 是否唯一
+	IsNullable   bool        `json:"is_nullable"`    // 是否可空
+	DefaultValue interface{} `json:"default_value"`  // 默认值
+	MaxLength    int         `json:"max_length"`     // 最大长度（字符串类型）
+	Precision    int         `json:"precision"`      // 精度（数字类型）
+	Scale        int         `json:"scale"`          // 小数位数
+	EnumValues   []string    `json:"enum_values"`    // 枚举值（ENUM 类型）
+	Comment      string      `json:"comment"`        // 字段注释
 }

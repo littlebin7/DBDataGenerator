@@ -2,31 +2,34 @@ package task
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
+	"DBDataGenerator/internal/generator"
 	"DBDataGenerator/internal/storage"
 )
 
 // TaskHistory 任务历史记录
 type TaskHistory struct {
-	ID            string     `json:"id"`
-	TaskID        string     `json:"task_id"`
-	TaskName      string     `json:"task_name"`
-	ConnectionID  string     `json:"connection_id"`
-	Database      string     `json:"database"`
-	TableName     string     `json:"table_name"`
-	Status        string     `json:"status"`
-	TotalRows     int64      `json:"total_rows"`
-	GeneratedRows int64      `json:"generated_rows"`
-	SuccessRows   int64      `json:"success_rows"`
-	FailedRows    int64      `json:"failed_rows"`
-	ThreadCount   int        `json:"thread_count"`
-	StartTime     *time.Time `json:"start_time"`
-	EndTime       *time.Time `json:"end_time"`
-	Duration      int64      `json:"duration"` // 持续时间（秒）
-	ErrorMessage  string     `json:"error_message"`
-	CreatedAt     time.Time  `json:"created_at"`
+	ID            string                 `json:"id"`
+	TaskID        string                 `json:"task_id"`
+	TaskName      string                 `json:"task_name"`
+	ConnectionID  string                 `json:"connection_id"`
+	Database      string                 `json:"database"`
+	TableName     string                 `json:"table_name"`
+	Config        *generator.TableConfig `json:"config"` // 任务配置（字段规则等）
+	Status        string                 `json:"status"`
+	TotalRows     int64                  `json:"total_rows"`
+	GeneratedRows int64                  `json:"generated_rows"`
+	SuccessRows   int64                  `json:"success_rows"`
+	FailedRows    int64                  `json:"failed_rows"`
+	ThreadCount   int                    `json:"thread_count"`
+	StartTime     *time.Time             `json:"start_time"`
+	EndTime       *time.Time             `json:"end_time"`
+	Duration      int64                  `json:"duration"` // 持续时间（秒）
+	ErrorMessage  string                 `json:"error_message"`
+	CreatedAt     time.Time              `json:"created_at"`
 }
 
 // HistoryManager 任务历史管理器
@@ -59,18 +62,27 @@ func (hm *HistoryManager) SaveHistory(task *Task) error {
 		}
 	}
 
+	// 序列化配置
+	var configJSON string
+	if task.Config != nil {
+		configBytes, err := json.Marshal(task.Config)
+		if err == nil {
+			configJSON = string(configBytes)
+		}
+	}
+
 	query := `
 		INSERT INTO task_history (
-			id, task_id, task_name, connection_id, database, table_name,
+			id, task_id, task_name, connection_id, database, table_name, config,
 			status, total_rows, generated_rows, success_rows, failed_rows,
 			thread_count, start_time, end_time, duration, error_message, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	historyID := fmt.Sprintf("%s_%d", task.ID, now.Unix())
 	_, err := hm.storage.GetDB().Exec(query,
 		historyID, task.ID, task.Name, task.ConnectionID, task.Database, task.Table,
-		string(task.Status), task.TotalRows, task.GeneratedRows, task.SuccessRows, task.FailedRows,
+		configJSON, string(task.Status), task.TotalRows, task.GeneratedRows, task.SuccessRows, task.FailedRows,
 		task.ThreadCount, startTime, endTime, duration, task.Error, now.Unix(),
 	)
 
@@ -80,7 +92,7 @@ func (hm *HistoryManager) SaveHistory(task *Task) error {
 // GetHistory 获取任务历史列表
 func (hm *HistoryManager) GetHistory(limit int, offset int, statusFilter string) ([]*TaskHistory, error) {
 	query := `
-		SELECT id, task_id, task_name, connection_id, database, table_name,
+		SELECT id, task_id, task_name, connection_id, database, table_name, config,
 		       status, total_rows, generated_rows, success_rows, failed_rows,
 		       thread_count, start_time, end_time, duration, error_message, created_at
 		FROM task_history
@@ -105,14 +117,23 @@ func (hm *HistoryManager) GetHistory(limit int, offset int, statusFilter string)
 	for rows.Next() {
 		h := &TaskHistory{}
 		var startTime, endTime, createdAt sql.NullInt64
+		var configJSON sql.NullString
 
 		err := rows.Scan(
 			&h.ID, &h.TaskID, &h.TaskName, &h.ConnectionID, &h.Database, &h.TableName,
-			&h.Status, &h.TotalRows, &h.GeneratedRows, &h.SuccessRows, &h.FailedRows,
+			&configJSON, &h.Status, &h.TotalRows, &h.GeneratedRows, &h.SuccessRows, &h.FailedRows,
 			&h.ThreadCount, &startTime, &endTime, &h.Duration, &h.ErrorMessage, &createdAt,
 		)
 		if err != nil {
 			continue
+		}
+
+		// 反序列化配置
+		if configJSON.Valid && configJSON.String != "" {
+			var config generator.TableConfig
+			if err := json.Unmarshal([]byte(configJSON.String), &config); err == nil {
+				h.Config = &config
+			}
 		}
 
 		if startTime.Valid {
@@ -130,13 +151,18 @@ func (hm *HistoryManager) GetHistory(limit int, offset int, statusFilter string)
 		history = append(history, h)
 	}
 
+	// 确保返回空数组而不是 nil
+	if history == nil {
+		history = []*TaskHistory{}
+	}
+
 	return history, nil
 }
 
 // GetHistoryByTaskID 根据任务ID获取历史记录
 func (hm *HistoryManager) GetHistoryByTaskID(taskID string) ([]*TaskHistory, error) {
 	query := `
-		SELECT id, task_id, task_name, connection_id, database, table_name,
+		SELECT id, task_id, task_name, connection_id, database, table_name, config,
 		       status, total_rows, generated_rows, success_rows, failed_rows,
 		       thread_count, start_time, end_time, duration, error_message, created_at
 		FROM task_history
@@ -154,14 +180,23 @@ func (hm *HistoryManager) GetHistoryByTaskID(taskID string) ([]*TaskHistory, err
 	for rows.Next() {
 		h := &TaskHistory{}
 		var startTime, endTime, createdAt sql.NullInt64
+		var configJSON sql.NullString
 
 		err := rows.Scan(
 			&h.ID, &h.TaskID, &h.TaskName, &h.ConnectionID, &h.Database, &h.TableName,
-			&h.Status, &h.TotalRows, &h.GeneratedRows, &h.SuccessRows, &h.FailedRows,
+			&configJSON, &h.Status, &h.TotalRows, &h.GeneratedRows, &h.SuccessRows, &h.FailedRows,
 			&h.ThreadCount, &startTime, &endTime, &h.Duration, &h.ErrorMessage, &createdAt,
 		)
 		if err != nil {
 			continue
+		}
+
+		// 反序列化配置
+		if configJSON.Valid && configJSON.String != "" {
+			var config generator.TableConfig
+			if err := json.Unmarshal([]byte(configJSON.String), &config); err == nil {
+				h.Config = &config
+			}
 		}
 
 		if startTime.Valid {

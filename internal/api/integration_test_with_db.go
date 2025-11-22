@@ -37,8 +37,8 @@ func getTestDatabaseConfig() *TestDatabaseConfig {
 		Host:     getEnv("TEST_DB_HOST", "192.168.1.174"),
 		Port:     getEnv("TEST_DB_PORT", "5433"),
 		User:     getEnv("TEST_DB_USER", "postgres"),
-		Password: getEnv("TEST_DB_PASSWORD", "postgres123"),
-		Database: getEnv("TEST_DB_NAME", "postgres"), // 使用默认 postgres 数据库
+		Password: getEnv("TEST_DB_PASSWORD", "postgres_password"),
+		Database: getEnv("TEST_DB_NAME", "postgres_db"), // 使用测试数据库
 	}
 	return config
 }

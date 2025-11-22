@@ -33,6 +33,15 @@ func NewHandler(connMgr database.ConnectionManagerInterface, templateMgr generat
 	if storageInstance.GetDB() != nil {
 		historyManager = task.NewHistoryManager(storageInstance)
 		manager.SetHistoryManager(historyManager)
+
+		// 设置任务持久化
+		persistence := task.NewTaskPersistence(storageInstance)
+		manager.SetPersistence(persistence)
+
+		// 从数据库恢复任务
+		if err := manager.LoadTasks(); err != nil {
+			logger.Warn("恢复任务失败", zap.Error(err))
+		}
 	}
 
 	// 创建定时任务调度器

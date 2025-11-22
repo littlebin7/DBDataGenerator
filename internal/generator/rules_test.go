@@ -585,3 +585,456 @@ func TestBinaryGenerator(t *testing.T) {
 		})
 	}
 }
+
+// 补充边界情况和错误处理测试
+
+func TestRandomStringGenerator_EdgeCases(t *testing.T) {
+	gen := &RandomStringGenerator{}
+
+	tests := []struct {
+		name    string
+		config  map[string]interface{}
+		wantErr bool
+	}{
+		{
+			name: "min > max",
+			config: map[string]interface{}{
+				"min_length": 20,
+				"max_length": 10,
+			},
+			wantErr: false, // 应该自动调整
+		},
+		{
+			name: "空字符集",
+			config: map[string]interface{}{
+				"min_length":   10,
+				"max_length":   20,
+				"custom_chars": "",
+			},
+			wantErr: false, // 应该使用默认字符集
+		},
+		{
+			name: "自定义字符集",
+			config: map[string]interface{}{
+				"min_length":   5,
+				"max_length":   10,
+				"custom_chars": "ABC123",
+			},
+			wantErr: false,
+		},
+		{
+			name: "中文字符集",
+			config: map[string]interface{}{
+				"min_length": 5,
+				"max_length": 10,
+				"char_set":   "chinese",
+			},
+			wantErr: false,
+		},
+		{
+			name: "特殊字符集",
+			config: map[string]interface{}{
+				"min_length": 5,
+				"max_length": 10,
+				"char_set":   "special",
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := &FieldRule{
+				RuleType: "random_string",
+				Config:   tt.config,
+			}
+
+			result, err := gen.Generate(rule, 0)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Generate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && result == nil {
+				t.Error("期望生成结果，但返回 nil")
+			}
+		})
+	}
+}
+
+func TestRandomNumberGenerator_EdgeCases(t *testing.T) {
+	gen := &RandomNumberGenerator{}
+
+	tests := []struct {
+		name    string
+		config  map[string]interface{}
+		wantErr bool
+	}{
+		{
+			name: "max < min",
+			config: map[string]interface{}{
+				"min":    100,
+				"max":    10,
+				"is_int": true,
+			},
+			wantErr: false, // 应该自动调整
+		},
+		{
+			name: "负数范围",
+			config: map[string]interface{}{
+				"min":    -100,
+				"max":    -10,
+				"is_int": true,
+			},
+			wantErr: false,
+		},
+		{
+			name: "零值",
+			config: map[string]interface{}{
+				"min":    0,
+				"max":    0,
+				"is_int": true,
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := &FieldRule{
+				RuleType: "random_number",
+				Config:   tt.config,
+			}
+
+			result, err := gen.Generate(rule, 0)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Generate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && result == nil {
+				t.Error("期望生成结果，但返回 nil")
+			}
+		})
+	}
+}
+
+func TestListGenerator_EdgeCases(t *testing.T) {
+	gen := &ListGenerator{}
+
+	tests := []struct {
+		name    string
+		config  map[string]interface{}
+		wantErr bool
+	}{
+		{
+			name: "空列表",
+			config: map[string]interface{}{
+				"values": []interface{}{},
+			},
+			wantErr: true, // 空列表应该返回错误
+		},
+		{
+			name: "单元素列表",
+			config: map[string]interface{}{
+				"values": []interface{}{"only_one"},
+			},
+			wantErr: false,
+		},
+		{
+			name: "混合类型列表",
+			config: map[string]interface{}{
+				"values": []interface{}{"string", 123, true, 45.6},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := &FieldRule{
+				RuleType: "list",
+				Config:   tt.config,
+			}
+
+			result, err := gen.Generate(rule, 0)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Generate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && result == nil {
+				t.Error("期望生成结果，但返回 nil")
+			}
+		})
+	}
+}
+
+func TestFileGenerator_EdgeCases(t *testing.T) {
+	gen := NewFileGenerator()
+
+	tests := []struct {
+		name    string
+		setup   func() string
+		config  map[string]interface{}
+		wantErr bool
+		cleanup func(string)
+	}{
+		{
+			name:  "文件不存在",
+			setup: func() string { return "nonexistent_file.txt" },
+			config: map[string]interface{}{
+				"file_path": "nonexistent_file.txt",
+				"file_type": "txt",
+			},
+			wantErr: true,
+			cleanup: func(s string) {},
+		},
+		{
+			name: "空文件",
+			setup: func() string {
+				tmpFile := "test_empty_file.txt"
+				os.WriteFile(tmpFile, []byte(""), 0644)
+				return tmpFile
+			},
+			config: map[string]interface{}{
+				"file_path": "test_empty_file.txt",
+				"file_type": "txt",
+			},
+			wantErr: true, // 空文件应该返回错误
+			cleanup: func(s string) { os.Remove(s) },
+		},
+		{
+			name: "CSV文件",
+			setup: func() string {
+				tmpFile := "test_csv_file.csv"
+				csvData := "col1,col2\nval1,val2\nval3,val4\n"
+				os.WriteFile(tmpFile, []byte(csvData), 0644)
+				return tmpFile
+			},
+			config: map[string]interface{}{
+				"file_path": "test_csv_file.csv",
+				"file_type": "csv",
+			},
+			wantErr: false,
+			cleanup: func(s string) { os.Remove(s) },
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			filePath := tt.setup()
+			defer tt.cleanup(filePath)
+
+			rule := &FieldRule{
+				RuleType: "file",
+				Config:   tt.config,
+			}
+
+			result, err := gen.Generate(rule, 0)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Generate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && result == nil {
+				t.Error("期望生成结果，但返回 nil")
+			}
+		})
+	}
+}
+
+func TestReferenceGenerator_EdgeCases(t *testing.T) {
+	gen := &ReferenceGenerator{}
+
+	tests := []struct {
+		name    string
+		rowData map[string]interface{}
+		config  map[string]interface{}
+		wantErr bool
+	}{
+		{
+			name: "复杂表达式",
+			rowData: map[string]interface{}{
+				"a": 10,
+				"b": 20,
+				"c": 30,
+			},
+			config: map[string]interface{}{
+				"expression": "{a} + {b} * {c}",
+			},
+			wantErr: false,
+		},
+		{
+			name: "字符串连接",
+			rowData: map[string]interface{}{
+				"first":  "Hello",
+				"second": "World",
+			},
+			config: map[string]interface{}{
+				"expression": "{first} + ' ' + {second}",
+			},
+			wantErr: false,
+		},
+		{
+			name: "不存在的字段",
+			rowData: map[string]interface{}{
+				"field1": 10,
+			},
+			config: map[string]interface{}{
+				"expression": "{field1} + {nonexistent}",
+			},
+			wantErr: false, // evaluateSimpleExpression 不会验证字段存在性，只是替换后计算
+		},
+		{
+			name: "无效表达式",
+			rowData: map[string]interface{}{
+				"field1": 10,
+			},
+			config: map[string]interface{}{
+				"expression": "{field1} + + {field1}", // 语法错误
+			},
+			wantErr: false, // evaluateSimpleExpression 无法解析时会返回原表达式，不报错
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := &FieldRule{
+				RuleType: "reference",
+				Config:   tt.config,
+			}
+
+			result, err := gen.GenerateWithRow(rule, 0, tt.rowData)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GenerateWithRow() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && result == nil {
+				t.Error("期望生成结果，但返回 nil")
+			}
+		})
+	}
+}
+
+func TestNullGenerator_EdgeCases(t *testing.T) {
+	gen := &NullGenerator{}
+
+	tests := []struct {
+		name    string
+		config  map[string]interface{}
+		wantErr bool
+	}{
+		{
+			name: "0%概率",
+			config: map[string]interface{}{
+				"probability": 0.0,
+			},
+			wantErr: false,
+		},
+		{
+			name: "50%概率",
+			config: map[string]interface{}{
+				"probability": 0.5,
+			},
+			wantErr: false,
+		},
+		{
+			name: "100%概率",
+			config: map[string]interface{}{
+				"probability": 1.0,
+			},
+			wantErr: false,
+		},
+		{
+			name: "超过100%概率",
+			config: map[string]interface{}{
+				"probability": 1.5,
+			},
+			wantErr: false, // 应该被限制为1.0
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			rule := &FieldRule{
+				RuleType: "null",
+				Config:   tt.config,
+			}
+
+			result, err := gen.Generate(rule, 0)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Generate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			// NullGenerator 的结果可能是 nil 或空字符串，都是可以接受的
+			_ = result
+		})
+	}
+}
+
+func TestIncrementGenerator_EdgeCases(t *testing.T) {
+	tests := []struct {
+		name    string
+		config  map[string]interface{}
+		index   int64
+		wantErr bool
+	}{
+		{
+			name: "负数起始值",
+			config: map[string]interface{}{
+				"start_value": -10,
+				"step":        1,
+			},
+			index:   0,
+			wantErr: false,
+		},
+		{
+			name: "负数步长",
+			config: map[string]interface{}{
+				"start_value": 100,
+				"step":        -1,
+			},
+			index:   0,
+			wantErr: false,
+		},
+		{
+			name: "零步长",
+			config: map[string]interface{}{
+				"start_value": 10,
+				"step":        0,
+			},
+			index:   0,
+			wantErr: false,
+		},
+		{
+			name: "大索引值",
+			config: map[string]interface{}{
+				"start_value": 0,
+				"step":        1,
+			},
+			index:   1000000,
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// 每个测试创建新的生成器实例，避免状态污染
+			gen := &IncrementGenerator{
+				counters: make(map[string]int64),
+			}
+
+			rule := &FieldRule{
+				FieldName: "test_field",
+				RuleType:  "increment",
+				Config:    tt.config,
+			}
+
+			result, err := gen.Generate(rule, tt.index)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Generate() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && result == nil {
+				t.Error("期望生成结果，但返回 nil")
+			}
+		})
+	}
+}

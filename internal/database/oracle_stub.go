@@ -64,3 +64,7 @@ func (db *OracleDB) GetDBType() string {
 func (db *OracleDB) ExecuteNonQuery(database, query string, args ...interface{}) (int64, error) {
 	return 0, fmt.Errorf("Oracle 数据库需要 CGO 和 Oracle Instant Client 库支持")
 }
+
+func (db *OracleDB) GetVersion() (string, error) {
+	return "", fmt.Errorf("Oracle 数据库需要 CGO 和 Oracle Instant Client 库支持")
+}

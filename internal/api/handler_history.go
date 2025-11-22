@@ -6,6 +6,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
+
+	"DBDataGenerator/internal/task"
 )
 
 // GetTaskHistory 获取任务历史列表
@@ -30,7 +32,19 @@ func (h *Handler) GetTaskHistory(c *gin.Context) {
 		return
 	}
 
-	h.sendSuccess(c, gin.H{"history": history})
+	// 确保 history 不为 nil（返回空数组）
+	if history == nil {
+		history = []*task.TaskHistory{}
+	}
+
+	// 获取总数
+	total, err := h.historyManager.GetHistoryCount(statusFilter)
+	if err != nil {
+		h.logger.Warn("获取任务历史总数失败", zap.Error(err))
+		total = len(history) // 如果获取总数失败，使用当前返回的数量
+	}
+
+	h.sendSuccess(c, gin.H{"history": history, "total": total})
 }
 
 // GetTaskHistoryByTaskID 根据任务ID获取历史记录

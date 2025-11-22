@@ -95,6 +95,32 @@ func (s *Storage) initTables() error {
 	)
 	`
 
+	// 任务表（用于持久化）
+	createTasksTable := `
+	CREATE TABLE IF NOT EXISTS tasks (
+		id TEXT PRIMARY KEY,
+		name TEXT NOT NULL,
+		connection_id TEXT NOT NULL,
+		database TEXT NOT NULL,
+		table_name TEXT NOT NULL,
+		config TEXT NOT NULL,
+		status TEXT NOT NULL,
+		thread_count INTEGER DEFAULT 4,
+		total_rows INTEGER NOT NULL,
+		generated_rows INTEGER DEFAULT 0,
+		success_rows INTEGER DEFAULT 0,
+		failed_rows INTEGER DEFAULT 0,
+		start_time INTEGER,
+		end_time INTEGER,
+		error_message TEXT,
+		progress REAL DEFAULT 0,
+		speed REAL DEFAULT 0,
+		eta INTEGER DEFAULT 0,
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	)
+	`
+
 	// 任务历史记录表
 	createTaskHistoryTable := `
 	CREATE TABLE IF NOT EXISTS task_history (
@@ -104,6 +130,7 @@ func (s *Storage) initTables() error {
 		connection_id TEXT NOT NULL,
 		database TEXT NOT NULL,
 		table_name TEXT NOT NULL,
+		config TEXT,
 		status TEXT NOT NULL,
 		total_rows INTEGER NOT NULL,
 		generated_rows INTEGER DEFAULT 0,
@@ -138,6 +165,8 @@ func (s *Storage) initTables() error {
 	createIndexes := []string{
 		"CREATE INDEX IF NOT EXISTS idx_connections_is_active ON connections(is_active)",
 		"CREATE INDEX IF NOT EXISTS idx_templates_table_name ON templates(table_name)",
+		"CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
+		"CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at)",
 		"CREATE INDEX IF NOT EXISTS idx_task_history_task_id ON task_history(task_id)",
 		"CREATE INDEX IF NOT EXISTS idx_task_history_status ON task_history(status)",
 		"CREATE INDEX IF NOT EXISTS idx_task_history_created_at ON task_history(created_at)",
@@ -151,6 +180,10 @@ func (s *Storage) initTables() error {
 
 	if _, err := s.db.Exec(createTemplatesTable); err != nil {
 		return fmt.Errorf("创建模板表失败: %w", err)
+	}
+
+	if _, err := s.db.Exec(createTasksTable); err != nil {
+		return fmt.Errorf("创建任务表失败: %w", err)
 	}
 
 	if _, err := s.db.Exec(createTaskHistoryTable); err != nil {

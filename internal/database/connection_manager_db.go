@@ -37,17 +37,6 @@ func (cm *ConnectionManagerDB) AddConnection(name string, config *ConnectionConf
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
 
-	// 创建数据库实例
-	db, err := NewDatabase(config.Type)
-	if err != nil {
-		return "", fmt.Errorf("创建数据库实例失败: %w", err)
-	}
-
-	// 连接数据库
-	if err := db.Connect(config); err != nil {
-		return "", fmt.Errorf("连接数据库失败: %w", err)
-	}
-
 	// 创建连接信息
 	connID := uuid.New().String()
 	now := time.Now().Unix()
@@ -55,7 +44,6 @@ func (cm *ConnectionManagerDB) AddConnection(name string, config *ConnectionConf
 	// 加密密码
 	encryptedPassword, err := storage.EncryptPassword(config.Password)
 	if err != nil {
-		db.Disconnect()
 		return "", fmt.Errorf("加密密码失败: %w", err)
 	}
 
@@ -70,18 +58,31 @@ func (cm *ConnectionManagerDB) AddConnection(name string, config *ConnectionConf
 		1, now, now,
 	)
 	if err != nil {
-		db.Disconnect()
 		return "", fmt.Errorf("保存连接配置失败: %w", err)
 	}
 
 	// 将所有其他连接设为非活动
 	_, _ = cm.storage.GetDB().Exec("UPDATE connections SET is_active = 0 WHERE id != ?", connID)
 
+	// 尝试连接数据库（如果连接失败，仍然保存配置）
+	var db Database
+	db, err = NewDatabase(config.Type)
+	if err == nil {
+		// 尝试连接，如果失败也不影响保存配置
+		if err = db.Connect(config); err != nil {
+			// 连接失败，不建立连接，但继续保存配置
+			db = nil
+		}
+	} else {
+		// 创建数据库实例失败，仍然保存配置
+		db = nil
+	}
+
 	connInfo := &ConnectionInfo{
 		ID:       connID,
 		Name:     name,
 		Config:   config,
-		Database: db,
+		Database: db, // 可能为 nil（连接失败时）
 		IsActive: true,
 	}
 
@@ -106,27 +107,9 @@ func (cm *ConnectionManagerDB) UpdateConnection(connID string, name string, conf
 		conn.Database = nil
 	}
 
-	// 创建新的数据库实例并测试连接
-	db, err := NewDatabase(config.Type)
-	if err != nil {
-		return fmt.Errorf("创建数据库实例失败: %w", err)
-	}
-
-	// 连接数据库
-	if err := db.Connect(config); err != nil {
-		return fmt.Errorf("连接数据库失败: %w", err)
-	}
-
-	// 测试连接
-	if err := db.TestConnection(); err != nil {
-		db.Disconnect()
-		return fmt.Errorf("连接测试失败: %w", err)
-	}
-
 	// 加密密码
 	encryptedPassword, err := storage.EncryptPassword(config.Password)
 	if err != nil {
-		db.Disconnect()
 		return fmt.Errorf("加密密码失败: %w", err)
 	}
 
@@ -144,14 +127,33 @@ func (cm *ConnectionManagerDB) UpdateConnection(connID string, name string, conf
 		now, connID,
 	)
 	if err != nil {
-		db.Disconnect()
 		return fmt.Errorf("更新连接配置失败: %w", err)
+	}
+
+	// 尝试连接数据库（如果连接失败，仍然保存配置）
+	var db Database
+	db, err = NewDatabase(config.Type)
+	if err == nil {
+		// 尝试连接，如果失败也不影响保存配置
+		if err = db.Connect(config); err != nil {
+			// 连接失败，不建立连接，但继续保存配置
+			db = nil
+		} else {
+			// 连接成功，测试连接
+			if err = db.TestConnection(); err != nil {
+				db.Disconnect()
+				db = nil // 测试失败，不建立连接
+			}
+		}
+	} else {
+		// 创建数据库实例失败，仍然保存配置
+		db = nil
 	}
 
 	// 更新内存中的连接信息
 	conn.Name = name
 	conn.Config = config
-	conn.Database = db
+	conn.Database = db // 可能为 nil（连接失败时）
 
 	return nil
 }
@@ -178,10 +180,11 @@ func (cm *ConnectionManagerDB) GetAllConnections() []*ConnectionInfo {
 	for _, conn := range cm.connections {
 		// 创建副本，不包含 Database 对象
 		connCopy := &ConnectionInfo{
-			ID:       conn.ID,
-			Name:     conn.Name,
-			Config:   conn.Config,
-			IsActive: conn.IsActive,
+			ID:        conn.ID,
+			Name:      conn.Name,
+			Config:    conn.Config,
+			IsActive:  conn.IsActive,
+			Connected: conn.Database != nil, // 根据 Database 是否为 nil 判断连接状态
 		}
 		connections = append(connections, connCopy)
 	}

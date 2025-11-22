@@ -486,6 +486,18 @@ func (db *OracleDB) GetDBType() string {
 	return "oracle"
 }
 
+func (db *OracleDB) GetVersion() (string, error) {
+	if db.db == nil {
+		return "", fmt.Errorf("数据库未连接")
+	}
+	var version string
+	err := db.db.QueryRow("SELECT banner FROM v$version WHERE rownum = 1").Scan(&version)
+	if err != nil {
+		return "", fmt.Errorf("获取版本失败: %w", err)
+	}
+	return version, nil
+}
+
 func (db *OracleDB) ExecuteNonQuery(database, query string, args ...interface{}) (int64, error) {
 	result, err := db.db.Exec(query, args...)
 	if err != nil {

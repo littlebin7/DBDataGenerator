@@ -91,6 +91,32 @@ func (ps *PostgresStorage) InitTables() error {
 	)
 	`
 
+	// 任务表（用于持久化）
+	createTasksTable := `
+	CREATE TABLE IF NOT EXISTS tasks (
+		id VARCHAR(36) PRIMARY KEY,
+		name VARCHAR(255) NOT NULL,
+		connection_id VARCHAR(36) NOT NULL,
+		database VARCHAR(255) NOT NULL,
+		table_name VARCHAR(255) NOT NULL,
+		config TEXT NOT NULL,
+		status VARCHAR(50) NOT NULL,
+		thread_count INTEGER DEFAULT 4,
+		total_rows BIGINT NOT NULL,
+		generated_rows BIGINT DEFAULT 0,
+		success_rows BIGINT DEFAULT 0,
+		failed_rows BIGINT DEFAULT 0,
+		start_time BIGINT,
+		end_time BIGINT,
+		error_message TEXT,
+		progress DOUBLE PRECISION DEFAULT 0,
+		speed DOUBLE PRECISION DEFAULT 0,
+		eta BIGINT DEFAULT 0,
+		created_at BIGINT NOT NULL,
+		updated_at BIGINT NOT NULL
+	)
+	`
+
 	// 任务历史记录表
 	createTaskHistoryTable := `
 	CREATE TABLE IF NOT EXISTS task_history (
@@ -100,6 +126,7 @@ func (ps *PostgresStorage) InitTables() error {
 		connection_id VARCHAR(36) NOT NULL,
 		database VARCHAR(255) NOT NULL,
 		table_name VARCHAR(255) NOT NULL,
+		config TEXT,
 		status VARCHAR(50) NOT NULL,
 		total_rows BIGINT NOT NULL,
 		generated_rows BIGINT DEFAULT 0,
@@ -134,6 +161,8 @@ func (ps *PostgresStorage) InitTables() error {
 	createIndexes := []string{
 		"CREATE INDEX IF NOT EXISTS idx_connections_is_active ON connections(is_active)",
 		"CREATE INDEX IF NOT EXISTS idx_templates_table_name ON templates(table_name)",
+		"CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status)",
+		"CREATE INDEX IF NOT EXISTS idx_tasks_created_at ON tasks(created_at)",
 		"CREATE INDEX IF NOT EXISTS idx_task_history_task_id ON task_history(task_id)",
 		"CREATE INDEX IF NOT EXISTS idx_task_history_status ON task_history(status)",
 		"CREATE INDEX IF NOT EXISTS idx_task_history_created_at ON task_history(created_at)",
@@ -147,6 +176,10 @@ func (ps *PostgresStorage) InitTables() error {
 
 	if _, err := ps.db.Exec(createTemplatesTable); err != nil {
 		return fmt.Errorf("创建模板表失败: %w", err)
+	}
+
+	if _, err := ps.db.Exec(createTasksTable); err != nil {
+		return fmt.Errorf("创建任务表失败: %w", err)
 	}
 
 	if _, err := ps.db.Exec(createTaskHistoryTable); err != nil {

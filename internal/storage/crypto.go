@@ -150,3 +150,83 @@ func DecryptPassword(encryptedPassword string) (string, error) {
 
 	return string(plaintext), nil
 }
+
+// EncryptData 加密数据（用于加密整个文件内容）
+func EncryptData(data []byte) ([]byte, error) {
+	if len(data) == 0 {
+		return data, nil
+	}
+
+	key := getEncryptionKey()
+
+	// 验证密钥长度
+	keyLen := len(key)
+	if keyLen != 16 && keyLen != 24 && keyLen != 32 {
+		return nil, fmt.Errorf("无效的加密密钥长度: %d 字节（必须是 16、24 或 32 字节）", keyLen)
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("创建加密器失败: %w", err)
+	}
+
+	// 使用GCM模式
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("创建GCM失败: %w", err)
+	}
+
+	// 生成随机nonce
+	nonce := make([]byte, aesGCM.NonceSize())
+	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, fmt.Errorf("生成nonce失败: %w", err)
+	}
+
+	// 加密
+	ciphertext := aesGCM.Seal(nonce, nonce, data, nil)
+
+	return ciphertext, nil
+}
+
+// DecryptData 解密数据（用于解密整个文件内容）
+func DecryptData(encryptedData []byte) ([]byte, error) {
+	if len(encryptedData) == 0 {
+		return encryptedData, nil
+	}
+
+	key := getEncryptionKey()
+
+	// 验证密钥长度
+	keyLen := len(key)
+	if keyLen != 16 && keyLen != 24 && keyLen != 32 {
+		return nil, fmt.Errorf("无效的加密密钥长度: %d 字节（必须是 16、24 或 32 字节）", keyLen)
+	}
+
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("创建解密器失败: %w", err)
+	}
+
+	// 使用GCM模式
+	aesGCM, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("创建GCM失败: %w", err)
+	}
+
+	// 检查长度
+	nonceSize := aesGCM.NonceSize()
+	if len(encryptedData) < nonceSize {
+		return nil, fmt.Errorf("加密数据太短")
+	}
+
+	// 提取nonce和密文
+	nonce, ciphertext := encryptedData[:nonceSize], encryptedData[nonceSize:]
+
+	// 解密
+	plaintext, err := aesGCM.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return nil, fmt.Errorf("解密失败: %w", err)
+	}
+
+	return plaintext, nil
+}
