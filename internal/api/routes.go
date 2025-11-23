@@ -1,8 +1,6 @@
 package api
 
 import (
-	"time"
-
 	"github.com/gin-gonic/gin"
 )
 
@@ -14,12 +12,12 @@ func SetupRoutes(router *gin.Engine, handler *Handler) {
 	// 添加审计日志中间件
 	router.Use(AuditMiddleware(handler.logger))
 
-	// 创建频率限制器（每分钟 100 个请求）
-	rateLimiter := NewRateLimiter(100, time.Minute, handler.logger)
+	// 创建请求去重器（防止同一接口重复请求）
+	requestDeduplicator := NewRequestDeduplicator(handler.logger)
 
 	api := router.Group("/api")
-	// 对 API 路由应用频率限制（排除 WebSocket 升级）
-	api.Use(rateLimiter.Limit())
+	// 对 API 路由应用请求去重（防止同一接口在没有返回值时重复请求）
+	api.Use(requestDeduplicator.PreventDuplicate())
 	{
 		// 连接管理
 		api.POST("/connect/test", handler.TestConnection)
@@ -43,15 +41,18 @@ func SetupRoutes(router *gin.Engine, handler *Handler) {
 
 		// 任务管理
 		api.POST("/task/create", handler.CreateTask)
+		api.PUT("/task/:id", handler.UpdateTask)
 		api.GET("/tasks", handler.GetTasks)
 		api.GET("/task/:id", handler.GetTask)
 		api.POST("/task/:id/start", handler.StartTask)
 		api.POST("/task/:id/retry", handler.RetryTask)
 		api.POST("/task/:id/pause", handler.PauseTask)
 		api.POST("/task/:id/resume", handler.ResumeTask)
+		api.POST("/task/:id/rollback", handler.RollbackTask)
 		api.POST("/task/:id/stop", handler.StopTask)
 		api.DELETE("/task/:id", handler.DeleteTask)
-		api.PUT("/task/:id/threads", handler.SetThreadCount)
+		// 线程数设置已禁用（固定为1，单个任务不拆分多线程）
+		// api.PUT("/task/:id/threads", handler.SetThreadCount)
 
 		// 配置模板管理
 		api.POST("/template/save", handler.SaveTemplate)

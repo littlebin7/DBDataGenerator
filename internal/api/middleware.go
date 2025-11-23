@@ -3,104 +3,70 @@ package api
 import (
 	"net/http"
 	"sync"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
-// RateLimiter 请求频率限制器
-type RateLimiter struct {
-	visitors map[string]*visitor
-	mu       sync.RWMutex
-	rate     int           // 每分钟允许的请求数
-	window   time.Duration // 时间窗口
-	logger   *zap.Logger
+// RequestDeduplicator 请求去重器（防止同一接口重复请求）
+type RequestDeduplicator struct {
+	pendingRequests map[string]bool // 正在进行的请求：key = method + path + query
+	mu              sync.RWMutex
+	logger          *zap.Logger
 }
 
-type visitor struct {
-	count    int
-	lastSeen time.Time
-}
-
-// NewRateLimiter 创建频率限制器
-func NewRateLimiter(rate int, window time.Duration, logger *zap.Logger) *RateLimiter {
-	rl := &RateLimiter{
-		visitors: make(map[string]*visitor),
-		rate:     rate,
-		window:   window,
-		logger:   logger,
-	}
-
-	// 定期清理过期的访问记录
-	go rl.cleanupVisitors()
-
-	return rl
-}
-
-// cleanupVisitors 清理过期的访问记录
-func (rl *RateLimiter) cleanupVisitors() {
-	for {
-		time.Sleep(5 * time.Minute)
-		rl.mu.Lock()
-		now := time.Now()
-		for ip, v := range rl.visitors {
-			if now.Sub(v.lastSeen) > rl.window*2 {
-				delete(rl.visitors, ip)
-			}
-		}
-		rl.mu.Unlock()
+// NewRequestDeduplicator 创建请求去重器
+func NewRequestDeduplicator(logger *zap.Logger) *RequestDeduplicator {
+	return &RequestDeduplicator{
+		pendingRequests: make(map[string]bool),
+		logger:          logger,
 	}
 }
 
-// Limit 频率限制中间件
-func (rl *RateLimiter) Limit() gin.HandlerFunc {
+// getRequestKey 生成请求的唯一标识（方法 + 路径 + 查询参数）
+func (rd *RequestDeduplicator) getRequestKey(c *gin.Context) string {
+	// 使用 方法 + 路径 + 查询参数 作为唯一标识
+	key := c.Request.Method + ":" + c.Request.URL.Path
+	if c.Request.URL.RawQuery != "" {
+		key += "?" + c.Request.URL.RawQuery
+	}
+	return key
+}
+
+// PreventDuplicate 防止重复请求中间件
+func (rd *RequestDeduplicator) PreventDuplicate() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		ip := c.ClientIP()
+		key := rd.getRequestKey(c)
 
-		rl.mu.Lock()
-		v, exists := rl.visitors[ip]
-		if !exists {
-			v = &visitor{
-				count:    1,
-				lastSeen: time.Now(),
-			}
-			rl.visitors[ip] = v
-			rl.mu.Unlock()
-			c.Next()
-			return
-		}
-
-		// 检查时间窗口
-		if time.Since(v.lastSeen) > rl.window {
-			// 重置计数
-			v.count = 1
-			v.lastSeen = time.Now()
-			rl.mu.Unlock()
-			c.Next()
-			return
-		}
-
-		// 检查是否超过限制
-		if v.count >= rl.rate {
-			rl.mu.Unlock()
-			rl.logger.Warn("请求频率超限",
-				zap.String("ip", ip),
+		rd.mu.Lock()
+		// 检查是否有相同的请求正在进行
+		if rd.pendingRequests[key] {
+			rd.mu.Unlock()
+			rd.logger.Debug("阻止重复请求",
+				zap.String("method", c.Request.Method),
 				zap.String("path", c.Request.URL.Path),
+				zap.String("query", c.Request.URL.RawQuery),
 			)
-			c.JSON(http.StatusTooManyRequests, gin.H{
+			c.JSON(http.StatusConflict, gin.H{
 				"error": gin.H{
-					"code":    "RATE_LIMIT_EXCEEDED",
-					"message": "请求频率过高，请稍后再试",
+					"code":    "DUPLICATE_REQUEST",
+					"message": "相同的请求正在进行中，请等待响应",
 				},
 			})
 			c.Abort()
 			return
 		}
 
-		v.count++
-		v.lastSeen = time.Now()
-		rl.mu.Unlock()
+		// 标记请求为进行中
+		rd.pendingRequests[key] = true
+		rd.mu.Unlock()
+
+		// 请求完成后，清除标记
+		defer func() {
+			rd.mu.Lock()
+			delete(rd.pendingRequests, key)
+			rd.mu.Unlock()
+		}()
 
 		c.Next()
 	}

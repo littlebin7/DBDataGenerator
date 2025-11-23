@@ -991,6 +991,18 @@ func (g *FunctionGenerator) Generate(rule *FieldRule, index int64) (interface{},
 		if params, ok := configMap["params"].([]interface{}); ok {
 			config.Params = params
 		}
+
+		// 获取 UUID 配置选项
+		if c, exists := configMap["case"]; exists {
+			if caseStr, ok := c.(string); ok {
+				config.Case = caseStr
+			}
+		}
+		if h, exists := configMap["with_hyphen"]; exists {
+			if withHyphenBool, ok := h.(bool); ok {
+				config.WithHyphen = withHyphenBool
+			}
+		}
 	}
 
 	// 如果从 map 中获取失败，尝试使用 JSON 序列化/反序列化
@@ -1007,6 +1019,21 @@ func (g *FunctionGenerator) Generate(rule *FieldRule, index int64) (interface{},
 	fn, exists := g.funcs[config.FuncName]
 	if !exists {
 		return nil, fmt.Errorf("未知函数: %s，可用函数: NOW, TODAY, UUID, RAND, RAND_INT, CONCAT", config.FuncName)
+	}
+
+	// 对于 UUID 函数，传递配置选项
+	if config.FuncName == "UUID" {
+		uuidParams := []interface{}{
+			map[string]interface{}{
+				"case":        config.Case,
+				"with_hyphen": config.WithHyphen,
+			},
+		}
+		result, err := fn(uuidParams)
+		if err != nil {
+			return nil, fmt.Errorf("执行函数 %s 失败: %w", config.FuncName, err)
+		}
+		return result, nil
 	}
 
 	result, err := fn(config.Params)
@@ -1026,7 +1053,42 @@ func (g *FunctionGenerator) registerBuiltinFunctions() {
 		return time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()), nil
 	}
 	g.funcs["UUID"] = func(params []interface{}) (interface{}, error) {
-		return uuid.New().String(), nil
+		// 从配置中获取 UUID 选项（如果存在）
+		var caseOption string = "mixed"
+		var withHyphen bool = true
+
+		// 尝试从 params 中获取配置（如果通过 FunctionConfig 传递）
+		if len(params) > 0 {
+			if configMap, ok := params[0].(map[string]interface{}); ok {
+				if c, exists := configMap["case"]; exists {
+					if caseStr, ok := c.(string); ok {
+						caseOption = caseStr
+					}
+				}
+				if h, exists := configMap["with_hyphen"]; exists {
+					if withHyphenBool, ok := h.(bool); ok {
+						withHyphen = withHyphenBool
+					}
+				}
+			}
+		}
+
+		uuidStr := uuid.New().String()
+
+		// 处理大小写
+		switch caseOption {
+		case "lower":
+			uuidStr = strings.ToLower(uuidStr)
+		case "upper":
+			uuidStr = strings.ToUpper(uuidStr)
+		}
+
+		// 处理连字符
+		if !withHyphen {
+			uuidStr = strings.ReplaceAll(uuidStr, "-", "")
+		}
+
+		return uuidStr, nil
 	}
 	g.funcs["RAND"] = func(params []interface{}) (interface{}, error) {
 		return rand.Float64(), nil

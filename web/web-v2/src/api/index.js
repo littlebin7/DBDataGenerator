@@ -151,15 +151,6 @@ export default {
     return response.data
   },
 
-  async updateTask(taskId, name, connectionId, config) {
-    const response = await api.put(`/task/${taskId}`, {
-      name,
-      connection_id: connectionId,
-      config
-    })
-    return response.data
-  },
-
   async getTasks() {
     const response = await api.get('/tasks')
     return response.data
@@ -187,11 +178,6 @@ export default {
 
   async resumeTask(taskId) {
     const response = await api.post(`/task/${taskId}/resume`)
-    return response.data
-  },
-
-  async rollbackTask(taskId) {
-    const response = await api.post(`/task/${taskId}/rollback`)
     return response.data
   },
 

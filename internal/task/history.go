@@ -136,11 +136,12 @@ func (hm *HistoryManager) GetHistory(limit int, offset int, statusFilter string)
 			}
 		}
 
-		if startTime.Valid {
+		// 转换时间（如果时间戳为0或负数，不设置时间）
+		if startTime.Valid && startTime.Int64 > 0 {
 			t := time.Unix(startTime.Int64, 0)
 			h.StartTime = &t
 		}
-		if endTime.Valid {
+		if endTime.Valid && endTime.Int64 > 0 {
 			t := time.Unix(endTime.Int64, 0)
 			h.EndTime = &t
 		}
@@ -199,11 +200,12 @@ func (hm *HistoryManager) GetHistoryByTaskID(taskID string) ([]*TaskHistory, err
 			}
 		}
 
-		if startTime.Valid {
+		// 转换时间（如果时间戳为0或负数，不设置时间）
+		if startTime.Valid && startTime.Int64 > 0 {
 			t := time.Unix(startTime.Int64, 0)
 			h.StartTime = &t
 		}
-		if endTime.Valid {
+		if endTime.Valid && endTime.Int64 > 0 {
 			t := time.Unix(endTime.Int64, 0)
 			h.EndTime = &t
 		}

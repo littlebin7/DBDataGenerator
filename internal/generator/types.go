@@ -111,8 +111,10 @@ type RegexConfig struct {
 
 // FunctionConfig 函数配置
 type FunctionConfig struct {
-	FuncName string        `json:"func_name"` // 函数名
-	Params   []interface{} `json:"params"`    // 函数参数
+	FuncName   string        `json:"func_name"`   // 函数名
+	Params     []interface{} `json:"params"`      // 函数参数
+	Case       string        `json:"case"`        // UUID 大小写：lower/upper/mixed（仅用于 UUID）
+	WithHyphen bool          `json:"with_hyphen"` // UUID 是否带连字符（仅用于 UUID）
 }
 
 // NullConfig 空值配置

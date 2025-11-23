@@ -96,6 +96,13 @@ func (p *WorkerPool) Start() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	// 开始任务级别的事务
+	if err := p.db.BeginTransaction(); err != nil {
+		// 如果开始事务失败，记录错误但不阻止任务启动
+		// 任务会继续执行，但使用批次级别的事务（向后兼容）
+		_ = err
+	}
+
 	p.workers = make([]*Worker, p.threadCount)
 	p.stopWorkers = make([]chan struct{}, p.threadCount)
 	for i := 0; i < p.threadCount; i++ {
@@ -124,7 +131,10 @@ func (p *WorkerPool) StopWithTimeout(timeout time.Duration) {
 	// 1. 取消 context，通知所有 worker 停止
 	p.cancel()
 
-	// 2. 关闭通道，防止新的工作项被添加
+	// 2. 回滚事务（任务被停止，不应该提交）
+	_ = p.db.RollbackTransaction()
+
+	// 3. 关闭通道，防止新的工作项被添加
 	p.mu.Lock()
 	close(p.taskChan)
 	close(p.resultChan)
@@ -321,7 +331,8 @@ func (w *Worker) execute(item *WorkItem) *WorkResult {
 	// 使用 goroutine 执行数据库操作，以便能够响应停止信号
 	insertDone := make(chan error, 1)
 	go func() {
-		insertDone <- w.pool.db.BatchInsert(w.pool.config.Database, w.pool.config.TableName, rows)
+		// 使用事务中的批量插入（任务级别事务）
+		insertDone <- w.pool.db.BatchInsertInTransaction(w.pool.config.Database, w.pool.config.TableName, rows)
 	}()
 
 	// 等待数据库操作完成或收到停止信号
@@ -417,6 +428,10 @@ func (p *WorkerPool) collectResults() {
 				p.task.SetStatus(TaskStatusError)
 				now := time.Now()
 				p.task.EndTime = &now
+
+				// 回滚事务（任务失败）
+				_ = p.db.RollbackTransaction()
+
 				p.mu.RLock()
 				onComplete := p.onComplete
 				p.mu.RUnlock()
@@ -441,7 +456,17 @@ func (p *WorkerPool) collectResults() {
 					p.task.UpdateProgress(totalGenerated, totalSuccess, totalFailed)
 				}
 
-				p.task.SetStatus(TaskStatusCompleted)
+				// 任务完成，提交事务
+				if err := p.db.CommitTransaction(); err != nil {
+					// 提交失败，标记为错误并回滚
+					p.task.SetStatus(TaskStatusError)
+					p.task.Error = fmt.Sprintf("提交事务失败: %v", err)
+					_ = p.db.RollbackTransaction()
+				} else {
+					// 提交成功，标记为完成
+					p.task.SetStatus(TaskStatusCompleted)
+				}
+
 				now := time.Now()
 				p.task.EndTime = &now
 

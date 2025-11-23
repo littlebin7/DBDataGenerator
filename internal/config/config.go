@@ -88,7 +88,7 @@ func Load() (*Config, error) {
 	viper.SetDefault("database.max_connections", 10)
 	viper.SetDefault("database.connection_timeout", "30s")
 	viper.SetDefault("database.idle_timeout", "5m")
-	viper.SetDefault("generator.default_batch_size", 500)
+	viper.SetDefault("generator.default_batch_size", 1000)
 	viper.SetDefault("generator.default_thread_count", 4)
 	viper.SetDefault("generator.max_thread_count", 20)
 	viper.SetDefault("generator.use_transaction", true)

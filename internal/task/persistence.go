@@ -63,8 +63,13 @@ func (tp *TaskPersistence) SaveTask(task *Task) error {
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON CONFLICT(id) DO UPDATE SET
 				name = excluded.name,
+				connection_id = excluded.connection_id,
+				database = excluded.database,
+				table_name = excluded.table_name,
+				config = excluded.config,
 				status = excluded.status,
 				thread_count = excluded.thread_count,
+				total_rows = excluded.total_rows,
 				generated_rows = excluded.generated_rows,
 				success_rows = excluded.success_rows,
 				failed_rows = excluded.failed_rows,
@@ -93,8 +98,13 @@ func (tp *TaskPersistence) SaveTask(task *Task) error {
 			) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 			ON CONFLICT(id) DO UPDATE SET
 				name = excluded.name,
+				connection_id = excluded.connection_id,
+				database = excluded.database,
+				table_name = excluded.table_name,
+				config = excluded.config,
 				status = excluded.status,
 				thread_count = excluded.thread_count,
+				total_rows = excluded.total_rows,
 				generated_rows = excluded.generated_rows,
 				success_rows = excluded.success_rows,
 				failed_rows = excluded.failed_rows,
@@ -123,8 +133,13 @@ func (tp *TaskPersistence) SaveTask(task *Task) error {
 			) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 			ON DUPLICATE KEY UPDATE
 				name = VALUES(name),
+				connection_id = VALUES(connection_id),
+				database = VALUES(database),
+				table_name = VALUES(table_name),
+				config = VALUES(config),
 				status = VALUES(status),
 				thread_count = VALUES(thread_count),
+				total_rows = VALUES(total_rows),
 				generated_rows = VALUES(generated_rows),
 				success_rows = VALUES(success_rows),
 				failed_rows = VALUES(failed_rows),
@@ -199,11 +214,11 @@ func (tp *TaskPersistence) LoadTasks() ([]*Task, error) {
 		task.Config = &config
 
 		// 转换时间
-		if startTime.Valid {
+		if startTime.Valid && startTime.Int64 > 0 {
 			t := time.Unix(startTime.Int64, 0)
 			task.StartTime = &t
 		}
-		if endTime.Valid {
+		if endTime.Valid && endTime.Int64 > 0 {
 			t := time.Unix(endTime.Int64, 0)
 			task.EndTime = &t
 		}

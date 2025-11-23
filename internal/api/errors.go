@@ -31,6 +31,7 @@ const (
 	ErrCodeTaskAlreadyRunning ErrorCode = "TASK_ALREADY_RUNNING" // 任务已在运行
 	ErrCodeTaskNotRunning     ErrorCode = "TASK_NOT_RUNNING"     // 任务未运行
 	ErrCodeTaskCreateFailed   ErrorCode = "TASK_CREATE_FAILED"   // 任务创建失败
+	ErrCodeTaskUpdateFailed   ErrorCode = "TASK_UPDATE_FAILED"   // 任务更新失败
 
 	// 模板相关错误码
 	ErrCodeTemplateNotFound   ErrorCode = "TEMPLATE_NOT_FOUND"   // 模板不存在

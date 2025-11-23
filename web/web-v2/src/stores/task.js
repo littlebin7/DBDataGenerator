@@ -115,17 +115,6 @@ export const useTaskStore = defineStore('task', {
       }
     },
 
-    // 回滚任务
-    async rollbackTask(taskId) {
-      try {
-        await api.rollbackTask(taskId)
-        await this.loadTasks()
-      } catch (error) {
-        console.error('回滚任务失败:', error)
-        throw error
-      }
-    },
-
     // 停止任务
     async stopTask(taskId) {
       try {

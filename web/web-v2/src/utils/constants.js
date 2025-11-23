@@ -9,8 +9,7 @@ export const TASK_STATUS = {
   PAUSED: 'paused',
   COMPLETED: 'completed',
   STOPPED: 'stopped',
-  ERROR: 'error',
-  ROLLED_BACK: 'rolled_back'
+  ERROR: 'error'
 }
 
 // 任务状态文本映射
@@ -20,8 +19,7 @@ export const TASK_STATUS_TEXT = {
   [TASK_STATUS.PAUSED]: '已暂停',
   [TASK_STATUS.COMPLETED]: '已完成',
   [TASK_STATUS.STOPPED]: '已停止',
-  [TASK_STATUS.ERROR]: '错误',
-  [TASK_STATUS.ROLLED_BACK]: '已回滚'
+  [TASK_STATUS.ERROR]: '错误'
 }
 
 // 任务状态类型映射（用于 Element Plus Tag）
@@ -31,8 +29,7 @@ export const TASK_STATUS_TYPE = {
   [TASK_STATUS.PAUSED]: 'warning',
   [TASK_STATUS.COMPLETED]: 'success',
   [TASK_STATUS.STOPPED]: 'info',
-  [TASK_STATUS.ERROR]: 'danger',
-  [TASK_STATUS.ROLLED_BACK]: 'warning'
+  [TASK_STATUS.ERROR]: 'danger'
 }
 
 // 数据库类型映射
@@ -81,7 +78,7 @@ export const WS_CONNECTION_STATUS_COLOR = {
 // 默认配置
 export const DEFAULT_CONFIG = {
   THREAD_COUNT: 4,
-  BATCH_SIZE: 1000,
+  BATCH_SIZE: 500,
   TOTAL_ROWS: 1000,
   PREVIEW_COUNT: 10,
   PAGE_SIZE: 20

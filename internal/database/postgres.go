@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -13,6 +14,9 @@ import (
 type PostgresDB struct {
 	pool   *pgxpool.Pool
 	config *ConnectionConfig
+	tx     pgx.Tx        // 任务级别的事务
+	txConn *pgxpool.Conn // 事务使用的连接（需要保持）
+	txMu   sync.Mutex
 }
 
 func NewPostgresDB() *PostgresDB {
@@ -271,6 +275,117 @@ func (db *PostgresDB) BatchInsert(database, table string, rows []map[string]inte
 		_, err := results.Exec()
 		if err != nil {
 			return fmt.Errorf("插入第 %d 行失败: %w", i+1, err)
+		}
+	}
+
+	return nil
+}
+
+// BeginTransaction 开始任务级别的事务
+func (db *PostgresDB) BeginTransaction() error {
+	db.txMu.Lock()
+	defer db.txMu.Unlock()
+
+	if db.tx != nil {
+		return fmt.Errorf("事务已存在")
+	}
+
+	conn, err := db.pool.Acquire(context.Background())
+	if err != nil {
+		return fmt.Errorf("获取连接失败: %w", err)
+	}
+
+	tx, err := conn.Begin(context.Background())
+	if err != nil {
+		conn.Release()
+		return fmt.Errorf("开始事务失败: %w", err)
+	}
+
+	// 保存事务和连接（需要保持连接直到事务结束）
+	db.tx = tx
+	db.txConn = conn
+	return nil
+}
+
+// CommitTransaction 提交事务
+func (db *PostgresDB) CommitTransaction() error {
+	db.txMu.Lock()
+	defer db.txMu.Unlock()
+
+	if db.tx == nil {
+		return fmt.Errorf("没有活动的事务")
+	}
+
+	err := db.tx.Commit(context.Background())
+	if db.txConn != nil {
+		db.txConn.Release()
+		db.txConn = nil
+	}
+	db.tx = nil
+	return err
+}
+
+// RollbackTransaction 回滚事务
+func (db *PostgresDB) RollbackTransaction() error {
+	db.txMu.Lock()
+	defer db.txMu.Unlock()
+
+	if db.tx == nil {
+		return nil // 没有事务，直接返回
+	}
+
+	err := db.tx.Rollback(context.Background())
+	if db.txConn != nil {
+		db.txConn.Release()
+		db.txConn = nil
+	}
+	db.tx = nil
+	return err
+}
+
+// BatchInsertInTransaction 在事务中批量插入
+func (db *PostgresDB) BatchInsertInTransaction(database, table string, rows []map[string]interface{}) error {
+	if len(rows) == 0 {
+		return nil
+	}
+
+	db.txMu.Lock()
+	tx := db.tx
+	db.txMu.Unlock()
+
+	if tx == nil {
+		// 如果没有事务，使用原来的方法（向后兼容）
+		return db.BatchInsert(database, table, rows)
+	}
+
+	// 获取字段名
+	fields := make([]string, 0, len(rows[0]))
+	for field := range rows[0] {
+		fields = append(fields, field)
+	}
+
+	// 构建 INSERT 语句
+	placeholders := make([]string, len(fields))
+	for i := range placeholders {
+		placeholders[i] = fmt.Sprintf("$%d", i+1)
+	}
+
+	query := fmt.Sprintf(
+		"INSERT INTO %s (%s) VALUES (%s)",
+		table,
+		strings.Join(fields, ","),
+		strings.Join(placeholders, ","),
+	)
+
+	// 在事务中批量插入
+	for _, row := range rows {
+		values := make([]interface{}, len(fields))
+		for i, field := range fields {
+			values[i] = row[field]
+		}
+		_, err := tx.Exec(context.Background(), query, values...)
+		if err != nil {
+			return fmt.Errorf("插入失败: %w", err)
 		}
 	}
 

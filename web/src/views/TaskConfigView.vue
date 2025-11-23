@@ -13,48 +13,42 @@
           </div>
         </template>
   
-        <!-- 基本信息配置 -->
-        <el-form :model="taskConfig" label-width="150px" style="margin-bottom: 30px">
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="任务名称">
-                <el-input v-model="taskConfig.name" placeholder="给任务起个名字" />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="生成数量">
-                <el-input-number 
-                  v-model="taskConfig.totalRows" 
-                  :min="1" 
-                  :max="100000000"
-                  style="width: 100%"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-row :gutter="20">
-            <el-col :span="12">
-              <el-form-item label="批次大小">
-                <el-input-number 
-                  v-model="taskConfig.batchSize" 
-                  :min="1" 
-                  :max="10000"
-                  style="width: 100%"
-                />
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item label="线程数">
-                <el-input-number 
-                  v-model="taskConfig.threadCount" 
-                  :min="1" 
-                  :max="20"
-                  style="width: 100%"
-                />
-              </el-form-item>
-            </el-col>
-          </el-row>
-        </el-form>
+        <!-- 基本信息配置（可折叠） -->
+        <el-collapse v-model="showBasicConfig" style="margin-bottom: 20px">
+          <el-collapse-item name="basic" :title="'基本信息配置'">
+            <el-form :model="taskConfig" label-width="150px">
+              <el-row :gutter="20">
+                <el-col :span="12">
+                  <el-form-item label="任务名称">
+                    <el-input v-model="taskConfig.name" placeholder="给任务起个名字" />
+                  </el-form-item>
+                </el-col>
+                <el-col :span="12">
+                  <el-form-item label="生成数量">
+                    <el-input-number 
+                      v-model="taskConfig.totalRows" 
+                      :min="1" 
+                      :max="100000000"
+                      style="width: 100%"
+                    />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+              <el-row :gutter="20">
+                <el-col :span="12">
+                  <el-form-item label="批次大小">
+                    <el-input-number 
+                      v-model="taskConfig.batchSize" 
+                      :min="1" 
+                      :max="10000"
+                      style="width: 100%"
+                    />
+                  </el-form-item>
+                </el-col>
+              </el-row>
+            </el-form>
+          </el-collapse-item>
+        </el-collapse>
   
         <!-- 字段规则配置 -->
         <el-divider>字段生成规则配置</el-divider>
@@ -72,7 +66,7 @@
           <el-button size="small" @click="resetAllRules">重置所有</el-button>
         </div>
   
-        <el-table :data="filteredFieldRules" border style="width: 100%" max-height="600">
+        <el-table :data="filteredFieldRules" border style="width: 100%" :max-height="tableMaxHeight">
           <el-table-column prop="fieldName" label="字段名" width="150" />
           <el-table-column prop="fieldType" label="字段类型" width="120" />
           <el-table-column label="规则类型" width="150">
@@ -212,21 +206,51 @@
                 <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
                   <el-input-number 
                     v-model="scope.row.config.min" 
-                    :precision="2"
+                    :precision="scope.row.config.isInt ? 0 : 2"
+                    :min="getNumericFieldRange(scope.row).min"
+                    :max="getNumericFieldRange(scope.row).max"
                     placeholder="最小值"
                     size="small"
                     style="width: 120px"
-                    @change="() => validateFieldRule(scope.row)"
+                    @change="() => { 
+                      const range = getNumericFieldRange(scope.row)
+                      if (scope.row.config.min < range.min) scope.row.config.min = range.min
+                      if (scope.row.config.min > range.max) scope.row.config.min = range.max
+                      if (scope.row.config.max !== undefined && scope.row.config.max < scope.row.config.min) {
+                        scope.row.config.max = scope.row.config.min
+                      }
+                      if (isIntType(scope.row)) scope.row.config.isInt = true
+                      validateFieldRule(scope.row) 
+                    }"
                   />
                   <el-input-number 
                     v-model="scope.row.config.max" 
-                    :precision="2"
+                    :precision="scope.row.config.isInt ? 0 : 2"
+                    :min="getNumericFieldRange(scope.row).min"
+                    :max="getNumericFieldRange(scope.row).max"
                     placeholder="最大值"
                     size="small"
                     style="width: 120px"
-                    @change="() => validateFieldRule(scope.row)"
+                    @change="() => { 
+                      const range = getNumericFieldRange(scope.row)
+                      if (scope.row.config.max < range.min) scope.row.config.max = range.min
+                      if (scope.row.config.max > range.max) scope.row.config.max = range.max
+                      if (scope.row.config.min !== undefined && scope.row.config.min > scope.row.config.max) {
+                        scope.row.config.min = scope.row.config.max
+                      }
+                      if (isIntType(scope.row)) scope.row.config.isInt = true
+                      validateFieldRule(scope.row) 
+                    }"
                   />
-                  <el-checkbox v-model="scope.row.config.isInt" size="small" @change="() => validateFieldRule(scope.row)">整数</el-checkbox>
+                  <el-checkbox 
+                    v-model="scope.row.config.isInt" 
+                    size="small" 
+                    :disabled="isIntType(scope.row)"
+                    @change="() => validateFieldRule(scope.row)"
+                  >
+                    整数
+                  </el-checkbox>
+                  <span v-if="isIntType(scope.row)" style="font-size: 12px; color: #909399;">(INT类型固定为整数)</span>
                   <el-tooltip
                     v-if="getFieldBoundaryInfo(scope.row) || validateFieldRule(scope.row).valid === false"
                     :content="validateFieldRule(scope.row).valid === false ? validateFieldRule(scope.row).message : getFieldBoundaryInfo(scope.row)"
@@ -259,8 +283,8 @@
                           @change="() => validateFieldRule(scope.row)"
                         />
                       </div>
-                      <!-- 精度和小数位数 -->
-                      <div style="display: flex; gap: 10px; align-items: center">
+                      <!-- 精度和小数位数（仅浮点类型且选择小数时显示） -->
+                      <div v-if="isFloatType(scope.row) && !scope.row.config.isInt" style="display: flex; gap: 10px; align-items: center">
                         <span style="width: 80px; font-size: 12px;">精度:</span>
                         <el-input-number 
                           v-model="scope.row.config.precision" 
@@ -274,6 +298,7 @@
                         <el-input-number 
                           v-model="scope.row.config.scale" 
                           :min="0"
+                          :max="10"
                           placeholder="小数位数"
                           size="small"
                           style="width: 120px"
@@ -342,44 +367,81 @@
               <!-- 随机日期配置 -->
               <div v-if="scope.row.ruleType === 'random_date'" style="display: flex; flex-direction: column; gap: 10px">
                 <!-- 基础配置 -->
-                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
-                  <el-date-picker
-                    v-model="scope.row.config.startDate"
-                    type="datetime"
-                    placeholder="开始日期"
-                    size="small"
-                    style="width: 180px"
-                    value-format="YYYY-MM-DDTHH:mm:ssZ"
-                    @change="() => validateFieldRule(scope.row)"
-                  />
-                  <el-date-picker
-                    v-model="scope.row.config.endDate"
-                    type="datetime"
-                    placeholder="结束日期"
-                    size="small"
-                    style="width: 180px"
-                    value-format="YYYY-MM-DDTHH:mm:ssZ"
-                    @change="() => validateFieldRule(scope.row)"
-                  />
-                  <el-input 
-                    v-model="scope.row.config.format" 
-                    placeholder="日期格式（可选）"
-                    size="small"
-                    style="width: 150px"
-                    @blur="() => validateFieldRule(scope.row)"
-                  />
-                  <el-tooltip
-                    v-if="getFieldBoundaryInfo(scope.row) || validateFieldRule(scope.row).valid === false"
-                    :content="validateFieldRule(scope.row).valid === false ? validateFieldRule(scope.row).message : getFieldBoundaryInfo(scope.row)"
-                    placement="top"
-                  >
-                    <el-icon 
-                      :style="{ color: validateFieldRule(scope.row).valid === false ? '#F56C6C' : '#909399', cursor: 'pointer', fontSize: '16px' }"
+                <div style="display: flex; flex-direction: column; gap: 10px">
+                  <!-- 日期范围 -->
+                  <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
+                    <span style="width: 80px; font-size: 12px;">开始日期:</span>
+                    <el-date-picker
+                      v-model="scope.row.config.startDate"
+                      type="date"
+                      placeholder="开始日期"
+                      size="small"
+                      style="width: 180px"
+                      value-format="YYYY-MM-DD"
+                      @change="() => validateFieldRule(scope.row)"
+                    />
+                    <span style="width: 80px; font-size: 12px;">结束日期:</span>
+                    <el-date-picker
+                      v-model="scope.row.config.endDate"
+                      type="date"
+                      placeholder="结束日期"
+                      size="small"
+                      style="width: 180px"
+                      value-format="YYYY-MM-DD"
+                      @change="() => validateFieldRule(scope.row)"
+                    />
+                    <el-input 
+                      v-model="scope.row.config.format" 
+                      placeholder="日期格式（可选）"
+                      size="small"
+                      style="width: 150px"
+                      @blur="() => validateFieldRule(scope.row)"
+                    />
+                    <el-tooltip
+                      v-if="getFieldBoundaryInfo(scope.row) || validateFieldRule(scope.row).valid === false"
+                      :content="validateFieldRule(scope.row).valid === false ? validateFieldRule(scope.row).message : getFieldBoundaryInfo(scope.row)"
+                      placement="top"
                     >
-                      <InfoFilled v-if="validateFieldRule(scope.row).valid !== false" />
-                      <WarningFilled v-else />
-                    </el-icon>
-                  </el-tooltip>
+                      <el-icon 
+                        :style="{ color: validateFieldRule(scope.row).valid === false ? '#F56C6C' : '#909399', cursor: 'pointer', fontSize: '16px' }"
+                      >
+                        <InfoFilled v-if="validateFieldRule(scope.row).valid !== false" />
+                        <WarningFilled v-else />
+                      </el-icon>
+                    </el-tooltip>
+                  </div>
+                  <!-- 时间配置（仅日期时间类型显示） -->
+                  <div v-if="isTimestampType(scope.row)" style="display: flex; flex-direction: column; gap: 10px">
+                    <div style="display: flex; gap: 10px; align-items: center">
+                      <el-checkbox 
+                        v-model="scope.row.config.fullDay" 
+                        size="small"
+                        @change="() => validateFieldRule(scope.row)"
+                      >
+                        一整天
+                      </el-checkbox>
+                    </div>
+                    <div v-if="!scope.row.config.fullDay" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
+                      <span style="width: 80px; font-size: 12px;">开始时间:</span>
+                      <el-time-picker
+                        v-model="scope.row.config.startTime"
+                        placeholder="开始时间"
+                        size="small"
+                        style="width: 180px"
+                        value-format="HH:mm:ss"
+                        @change="() => validateFieldRule(scope.row)"
+                      />
+                      <span style="width: 80px; font-size: 12px;">结束时间:</span>
+                      <el-time-picker
+                        v-model="scope.row.config.endTime"
+                        placeholder="结束时间"
+                        size="small"
+                        style="width: 180px"
+                        value-format="HH:mm:ss"
+                        @change="() => validateFieldRule(scope.row)"
+                      />
+                    </div>
+                  </div>
                 </div>
                 <!-- 粒度配置（可折叠） -->
                 <el-collapse v-model="scope.row.showGranularity" style="border: none;">
@@ -533,30 +595,46 @@
                         <el-button size="small" text @click="scope.row.config.secondRange = null">清除</el-button>
                       </div>
                       <!-- 星期 -->
-                      <div style="display: flex; gap: 10px; align-items: center">
-                        <span style="width: 80px; font-size: 12px;">星期:</span>
-                        <el-select 
-                          v-model="scope.row.config.weekdayList" 
-                          multiple
-                          placeholder="选择星期（0=周日, 1=周一...）"
-                          size="small"
-                          style="width: 200px"
-                          @change="() => validateFieldRule(scope.row)"
-                        >
-                          <el-option label="周日" :value="0" />
-                          <el-option label="周一" :value="1" />
-                          <el-option label="周二" :value="2" />
-                          <el-option label="周三" :value="3" />
-                          <el-option label="周四" :value="4" />
-                          <el-option label="周五" :value="5" />
-                          <el-option label="周六" :value="6" />
-                        </el-select>
-                        <el-button size="small" text @click="scope.row.config.weekdayList = []">清除</el-button>
-                      </div>
-                      <!-- 工作日/周末 -->
-                      <div style="display: flex; gap: 10px; align-items: center">
-                        <el-checkbox v-model="scope.row.config.onlyWeekdays" size="small" @change="() => { if(scope.row.config.onlyWeekdays) scope.row.config.onlyWeekends = false; validateFieldRule(scope.row) }">仅工作日（周一到周五）</el-checkbox>
-                        <el-checkbox v-model="scope.row.config.onlyWeekends" size="small" @change="() => { if(scope.row.config.onlyWeekends) scope.row.config.onlyWeekdays = false; validateFieldRule(scope.row) }">仅周末（周六和周日）</el-checkbox>
+                      <div style="display: flex; flex-direction: column; gap: 10px">
+                        <div style="display: flex; gap: 10px; align-items: center">
+                          <span style="width: 80px; font-size: 12px;">星期:</span>
+                          <el-radio-group 
+                            v-model="scope.row.config.weekdayMode" 
+                            size="small"
+                            @change="() => {
+                              if (scope.row.config.weekdayMode === 'all') {
+                                scope.row.config.weekdayList = []
+                              } else if (scope.row.config.weekdayMode === 'weekdays') {
+                                scope.row.config.weekdayList = [1, 2, 3, 4, 5]
+                              } else if (scope.row.config.weekdayMode === 'custom') {
+                                scope.row.config.weekdayList = scope.row.config.weekdayCustom || [1, 2, 3, 4, 5]
+                              }
+                              validateFieldRule(scope.row)
+                            }"
+                          >
+                            <el-radio label="all">全部</el-radio>
+                            <el-radio label="weekdays">工作日</el-radio>
+                            <el-radio label="custom">自定义</el-radio>
+                          </el-radio-group>
+                        </div>
+                        <!-- 自定义星期复选框 -->
+                        <div v-if="scope.row.config.weekdayMode === 'custom'" style="display: flex; gap: 10px; align-items: center; margin-left: 80px;">
+                          <el-checkbox-group 
+                            v-model="scope.row.config.weekdayCustom"
+                            @change="() => {
+                              scope.row.config.weekdayList = scope.row.config.weekdayCustom || []
+                              validateFieldRule(scope.row)
+                            }"
+                          >
+                            <el-checkbox :label="1" size="small">星期一</el-checkbox>
+                            <el-checkbox :label="2" size="small">星期二</el-checkbox>
+                            <el-checkbox :label="3" size="small">星期三</el-checkbox>
+                            <el-checkbox :label="4" size="small">星期四</el-checkbox>
+                            <el-checkbox :label="5" size="small">星期五</el-checkbox>
+                            <el-checkbox :label="6" size="small">星期六</el-checkbox>
+                            <el-checkbox :label="0" size="small">星期日</el-checkbox>
+                          </el-checkbox-group>
+                        </div>
                       </div>
                     </div>
                   </el-collapse-item>
@@ -676,26 +754,31 @@
               <!-- 列表配置 -->
               <div v-if="scope.row.ruleType === 'list'" style="display: flex; flex-direction: column; gap: 10px">
                 <!-- 基础配置 -->
-                <div style="display: flex; gap: 8px; align-items: center">
-                  <el-input 
-                    v-model="scope.row.config.valuesText" 
-                    placeholder="输入值列表，用逗号分隔"
-                    size="small"
-                    style="flex: 1"
-                    @blur="() => { parseListValues(scope.row); validateFieldRule(scope.row) }"
-                  />
-                  <el-tooltip
-                    v-if="getFieldBoundaryInfo(scope.row) || validateFieldRule(scope.row).valid === false"
-                    :content="validateFieldRule(scope.row).valid === false ? validateFieldRule(scope.row).message : getFieldBoundaryInfo(scope.row)"
-                    placement="top"
-                  >
-                    <el-icon 
-                      :style="{ color: validateFieldRule(scope.row).valid === false ? '#F56C6C' : '#909399', cursor: 'pointer', fontSize: '16px' }"
+                <div style="display: flex; flex-direction: column; gap: 8px">
+                  <div style="display: flex; gap: 8px; align-items: center">
+                    <span style="width: 60px; font-size: 12px;">值:</span>
+                    <el-input 
+                      v-model="scope.row.config.valuesText" 
+                      type="textarea"
+                      :rows="6"
+                      placeholder="输入值列表，每行一个值"
+                      size="small"
+                      style="flex: 1"
+                      @blur="() => { parseListValues(scope.row); validateFieldRule(scope.row) }"
+                    />
+                    <el-tooltip
+                      v-if="getFieldBoundaryInfo(scope.row) || validateFieldRule(scope.row).valid === false"
+                      :content="validateFieldRule(scope.row).valid === false ? validateFieldRule(scope.row).message : getFieldBoundaryInfo(scope.row)"
+                      placement="top"
                     >
-                      <InfoFilled v-if="validateFieldRule(scope.row).valid !== false" />
-                      <WarningFilled v-else />
-                    </el-icon>
-                  </el-tooltip>
+                      <el-icon 
+                        :style="{ color: validateFieldRule(scope.row).valid === false ? '#F56C6C' : '#909399', cursor: 'pointer', fontSize: '16px' }"
+                      >
+                        <InfoFilled v-if="validateFieldRule(scope.row).valid !== false" />
+                        <WarningFilled v-else />
+                      </el-icon>
+                    </el-tooltip>
+                  </div>
                 </div>
                 <!-- 粒度配置（可折叠） -->
                 <el-collapse v-model="scope.row.showGranularity" style="border: none;">
@@ -755,20 +838,41 @@
               </div>
   
               <!-- 函数配置 -->
-              <div v-if="scope.row.ruleType === 'function'" style="display: flex; gap: 10px">
-                <el-select 
-                  v-model="scope.row.config.funcName" 
-                  size="small" 
-                  style="width: 150px"
-                  @change="(val) => { console.log('[函数选择]', scope.row.fieldName, '选择了:', val, '当前config:', scope.row.config) }"
-                >
-                  <el-option label="NOW()" value="NOW" />
-                  <el-option label="TODAY()" value="TODAY" />
-                  <el-option label="UUID()" value="UUID" />
-                  <el-option label="RAND()" value="RAND" />
-                  <el-option label="RAND_INT(min, max)" value="RAND_INT" />
-                  <el-option label="CONCAT(...)" value="CONCAT" />
-                </el-select>
+              <div v-if="scope.row.ruleType === 'function'" style="display: flex; flex-direction: column; gap: 10px">
+                <div style="display: flex; gap: 10px; align-items: center">
+                  <el-select 
+                    v-model="scope.row.config.funcName" 
+                    size="small" 
+                    style="width: 150px"
+                    @change="(val) => { console.log('[函数选择]', scope.row.fieldName, '选择了:', val, '当前config:', scope.row.config) }"
+                  >
+                    <el-option label="NOW()" value="NOW" />
+                    <el-option label="TODAY()" value="TODAY" />
+                    <el-option label="UUID()" value="UUID" />
+                    <el-option label="RAND()" value="RAND" />
+                    <el-option label="RAND_INT(min, max)" value="RAND_INT" />
+                    <el-option label="CONCAT(...)" value="CONCAT" />
+                  </el-select>
+                  <!-- UUID 配置选项 -->
+                  <template v-if="scope.row.config.funcName === 'UUID'">
+                    <el-select 
+                      v-model="scope.row.config.case" 
+                      size="small" 
+                      style="width: 120px"
+                      placeholder="大小写"
+                    >
+                      <el-option label="小写" value="lower" />
+                      <el-option label="大写" value="upper" />
+                      <el-option label="混合" value="mixed" />
+                    </el-select>
+                    <el-checkbox 
+                      v-model="scope.row.config.withHyphen" 
+                      size="small"
+                    >
+                      带连字符(-)
+                    </el-checkbox>
+                  </template>
+                </div>
               </div>
   
               <!-- 模板配置 -->
@@ -951,7 +1055,9 @@
         <!-- 操作按钮 -->
         <div style="margin-top: 20px; text-align: right">
           <el-button @click="handleBack" :disabled="actionLoading.get('back')">取消</el-button>
-          <el-button type="primary" @click="createTask" :loading="actionLoading.get('createTask')" :disabled="actionLoading.get('createTask')">创建任务</el-button>
+          <el-button type="primary" @click="createTask" :loading="actionLoading.get('createTask')" :disabled="actionLoading.get('createTask')">
+            {{ isEditMode ? '更新任务' : '创建任务' }}
+          </el-button>
         </div>
       </el-card>
   
@@ -1277,9 +1383,20 @@
   const tableName = ref(route.query.table || '')
   const connectionId = ref(route.query.connection_id || '')
   const database = ref(route.query.database || '')
+  const taskId = ref(route.query.task_id || '')
+  const isEditMode = computed(() => !!taskId.value)
   const tableSchema = ref(null)
   const fieldRules = ref([])
   const fieldSearchText = ref('')
+  
+  // 基本信息配置折叠状态（空数组表示折叠）
+  const showBasicConfig = ref([])
+  
+  // 表格最大高度（动态计算，根据基本信息配置是否展开）
+  const tableMaxHeight = computed(() => {
+    // 如果基本信息配置展开，表格高度小一些；如果折叠，表格高度大一些
+    return showBasicConfig.value.includes('basic') ? 'calc(100vh - 500px)' : 'calc(100vh - 350px)'
+  })
   const showPreviewDialog = ref(false)
   const previewData = ref([])
   const previewLoading = ref(false)
@@ -1326,8 +1443,8 @@
   const taskConfig = ref({
     name: '',
     totalRows: 1000,
-    batchSize: 500,
-    threadCount: 4
+    batchSize: 1000,
+    threadCount: 1  // 固定为1，单个任务不拆分多线程
   })
   
   // 获取缓存 key
@@ -1380,15 +1497,126 @@
     }
   }
   
+  // 加载任务配置（编辑模式）
+  const loadTaskConfig = async () => {
+    if (!taskId.value) return
+    
+    try {
+      const task = await api.getTask(taskId.value)
+      if (!task) {
+        ElMessage.error('任务不存在')
+        router.push('/tasks')
+        return
+      }
+
+      // 检查任务状态，只有未运行的任务可以编辑
+      if (task.status === 'running' || task.status === 'paused') {
+        ElMessage.warning('无法编辑正在运行或已暂停的任务')
+        router.push('/tasks')
+        return
+      }
+
+      // 填充任务基本信息
+      if (task.name) {
+        taskConfig.value.name = task.name
+      }
+      if (task.config) {
+        if (task.config.total_rows) {
+          taskConfig.value.totalRows = task.config.total_rows
+        }
+        if (task.config.batch_size) {
+          taskConfig.value.batchSize = task.config.batch_size
+        }
+      }
+
+      // 更新连接ID和数据库（如果任务中有）
+      if (task.connection_id) {
+        connectionId.value = task.connection_id
+      }
+      if (task.database) {
+        database.value = task.database
+      }
+      if (task.table) {
+        tableName.value = task.table
+      }
+    } catch (error) {
+      ElMessage.error('加载任务配置失败: ' + (error.formattedMessage || error.message))
+      router.push('/tasks')
+    }
+  }
+
   onMounted(async () => {
-    if (!tableName.value) {
-      ElMessage.error('表名不能为空')
+    if (!tableName.value && !taskId.value) {
+      ElMessage.error('表名或任务ID不能为空')
       router.back()
       return
     }
-  
-    await loadTableSchema()
+
+    // 如果是编辑模式，先加载任务配置
+    if (isEditMode.value) {
+      await loadTaskConfig()
+      // 确保在加载任务配置后再加载表结构
+      if (tableName.value && database.value) {
+        await loadTableSchema()
+      } else {
+        ElMessage.error('任务配置中缺少表名或数据库信息')
+        router.push('/tasks')
+        return
+      }
+    } else {
+      await loadTableSchema()
+    }
+    
     await loadTemplates()
+    
+    // 如果是编辑模式，加载任务配置到字段规则
+    if (isEditMode.value) {
+      try {
+        const task = await api.getTask(taskId.value)
+        if (task && task.config && task.config.field_rules) {
+          console.log('编辑模式：加载任务配置', task.config)
+          
+          // 将任务配置的字段规则应用到字段规则列表
+          const fieldMap = new Map()
+          fieldRules.value.forEach(field => {
+            fieldMap.set(field.fieldName, field)
+          })
+
+          // 应用任务配置的字段规则
+          task.config.field_rules.forEach(rule => {
+            const field = fieldMap.get(rule.field_name)
+            if (field) {
+              console.log(`应用字段规则: ${rule.field_name}`, rule)
+              // 先设置规则类型
+              field.ruleType = rule.rule_type
+              // 然后获取默认配置作为基础
+              const defaultConfig = getDefaultConfig(field)
+              // 深度合并任务配置和默认配置，确保所有配置项都被恢复
+              const mergedConfig = { ...defaultConfig, ...(rule.config || {}) }
+              
+              // 特殊处理：如果是序列类型且 max_value 为 0，使用生成数量作为默认值
+              if (rule.rule_type === 'increment' && (!rule.config || !rule.config.max_value || rule.config.max_value === 0)) {
+                mergedConfig.maxValue = taskConfig.value.totalRows || 1000
+              }
+              
+              field.config = mergedConfig
+              
+              // 触发规则类型变化，确保配置正确应用
+              // 注意：这里不调用 onRuleTypeChange，因为我们已经手动设置了配置
+            } else {
+              console.warn(`字段 ${rule.field_name} 在表结构中不存在`)
+            }
+          })
+          
+          ElMessage.success('任务配置已恢复')
+        } else {
+          console.warn('任务配置中没有字段规则')
+        }
+      } catch (error) {
+        console.error('加载任务字段规则失败:', error)
+        ElMessage.error('加载任务配置失败: ' + (error.formattedMessage || error.message))
+      }
+    }
     
     // 延迟生成示例值，等待字段规则初始化完成
     setTimeout(() => {
@@ -1405,6 +1633,17 @@
   }, { deep: true })
   
   const loadTableSchema = async () => {
+    // 如果是编辑模式但还没有表名，等待任务配置加载完成
+    if (isEditMode.value && !tableName.value) {
+      console.log('编辑模式：等待任务配置加载完成')
+      return
+    }
+    
+    if (!tableName.value || !database.value) {
+      console.warn('表名或数据库名为空，无法加载表结构')
+      return
+    }
+    
     try {
       const params = { database: database.value }
       if (connectionId.value) {
@@ -1424,54 +1663,57 @@
         return
       }
       
-      // 先尝试从缓存恢复配置
-      const cachedData = loadConfigFromCache()
-      if (cachedData && cachedData.fieldRules && cachedData.fieldRules.length > 0) {
-        // 获取当前表结构的字段名
-        const currentFieldNames = response.fields.map(f => f.name || f.Name).sort()
-        const cachedFieldNames = cachedData.fieldRules.map(f => f.fieldName).sort()
-        
-        // 检查字段名是否完全匹配
-        if (currentFieldNames.length === cachedFieldNames.length && 
-            currentFieldNames.every((name, index) => name === cachedFieldNames[index])) {
-          // 字段匹配，使用缓存的配置，但需要确保字段元数据是最新的
-          const fieldMap = new Map()
-          response.fields.forEach(field => {
-            fieldMap.set(field.name || field.Name, field)
-          })
+      // 编辑模式下不使用缓存，直接使用默认配置初始化，后续会应用任务配置
+      // 非编辑模式下才尝试从缓存恢复配置
+      if (!isEditMode.value) {
+        const cachedData = loadConfigFromCache()
+        if (cachedData && cachedData.fieldRules && cachedData.fieldRules.length > 0) {
+          // 获取当前表结构的字段名
+          const currentFieldNames = response.fields.map(f => f.name || f.Name).sort()
+          const cachedFieldNames = cachedData.fieldRules.map(f => f.fieldName).sort()
           
-          // 合并缓存的配置和最新的字段元数据
-          fieldRules.value = cachedData.fieldRules.map(cachedRule => {
-            const field = fieldMap.get(cachedRule.fieldName)
-            if (!field) return cachedRule
+          // 检查字段名是否完全匹配
+          if (currentFieldNames.length === cachedFieldNames.length && 
+              currentFieldNames.every((name, index) => name === cachedFieldNames[index])) {
+            // 字段匹配，使用缓存的配置，但需要确保字段元数据是最新的
+            const fieldMap = new Map()
+            response.fields.forEach(field => {
+              fieldMap.set(field.name || field.Name, field)
+            })
             
-            // 保留缓存的规则类型和配置，但更新字段元数据
-            return {
-              ...cachedRule,
-              fieldType: field.type || field.Type,
-              goType: (field.go_type || field.GoType || '').toLowerCase(),
-              isPrimaryKey: field.is_primary_key || field.IsPrimaryKey || false,
-              isForeignKey: field.is_foreign_key || field.IsForeignKey || false,
-              isUnique: field.is_unique || field.IsUnique || false,
-              isNullable: field.is_nullable !== false && field.IsNullable !== false,
-              defaultValue: field.default_value || field.DefaultValue,
-              maxLength: field.max_length || field.MaxLength || 0,
-              precision: field.precision || field.Precision || 0,
-              scale: field.scale || field.Scale || 0
+            // 合并缓存的配置和最新的字段元数据
+            fieldRules.value = cachedData.fieldRules.map(cachedRule => {
+              const field = fieldMap.get(cachedRule.fieldName)
+              if (!field) return cachedRule
+              
+              // 保留缓存的规则类型和配置，但更新字段元数据
+              return {
+                ...cachedRule,
+                fieldType: field.type || field.Type,
+                goType: (field.go_type || field.GoType || '').toLowerCase(),
+                isPrimaryKey: field.is_primary_key || field.IsPrimaryKey || false,
+                isForeignKey: field.is_foreign_key || field.IsForeignKey || false,
+                isUnique: field.is_unique || field.IsUnique || false,
+                isNullable: field.is_nullable !== false && field.IsNullable !== false,
+                defaultValue: field.default_value || field.DefaultValue,
+                maxLength: field.max_length || field.MaxLength || 0,
+                precision: field.precision || field.Precision || 0,
+                scale: field.scale || field.Scale || 0
+              }
+            })
+            
+            // 恢复任务配置
+            if (cachedData.taskConfig) {
+              taskConfig.value = { ...taskConfig.value, ...cachedData.taskConfig }
             }
-          })
-          
-          // 恢复任务配置
-          if (cachedData.taskConfig) {
-            taskConfig.value = { ...taskConfig.value, ...cachedData.taskConfig }
+            
+            ElMessage.info('已恢复上次的配置')
+            console.log('从缓存恢复的字段规则:', fieldRules.value)
+            return
+          } else {
+            // 字段不匹配，清除缓存
+            clearCache()
           }
-          
-          ElMessage.info('已恢复上次的配置')
-          console.log('从缓存恢复的字段规则:', fieldRules.value)
-          return
-        } else {
-          // 字段不匹配，清除缓存
-          clearCache()
         }
       }
       
@@ -1518,13 +1760,19 @@
   
   const getDefaultRuleType = (field) => {
     if (field.is_primary_key || field.IsPrimaryKey) {
-      return 'function' // 默认使用 UUID
+      // 主键默认使用序列（increment 类型）
+      return 'increment'
+    }
+    if (field.is_unique || field.IsUnique) {
+      // 唯一约束默认使用 UUID（function 类型）
+      return 'function'
     }
     if (field.is_foreign_key || field.IsForeignKey) {
       return 'foreign'
     }
     
     const type = (field.go_type || field.GoType || '').toLowerCase()
+    const fieldType = (field.type || field.Type || '').toLowerCase()
     if (type.includes('int')) {
       return 'random_number'
     } else if (type.includes('float') || type.includes('decimal')) {
@@ -1533,6 +1781,12 @@
       return 'random_date'
     } else if (type === 'bool') {
       return 'list'
+    } else if (fieldType.includes('varchar') || fieldType.includes('char') || (type === 'string' && !fieldType.includes('text'))) {
+      // VARCHAR 类型默认使用正则表达式
+      return 'regex'
+    } else if (fieldType.includes('text') || fieldType.includes('clob')) {
+      // TEXT 类型默认使用文本（random_string）
+      return 'random_string'
     } else {
       return 'random_string'
     }
@@ -1553,14 +1807,47 @@
     } else if (ruleType === 'foreign') {
       return { foreignTable: '', randomSelect: true }
     } else if (ruleType === 'regex') {
-      return { pattern: '', presetPattern: '' }
+      // VARCHAR 类型默认使用 [A-Za-z0-9]{10}，但需要检查字段长度限制
+      const fieldType = (field.fieldType || field.type || '').toLowerCase()
+      const maxLength = field.maxLength || field.max_length || field.MaxLength || 0
+      let patternLength = 10
+      
+      // 如果是 VARCHAR 类型，检查长度限制
+      if (fieldType.includes('varchar') || fieldType.includes('char')) {
+        if (maxLength > 0 && patternLength > maxLength) {
+          patternLength = maxLength
+        }
+      }
+      
+      return { 
+        pattern: `[A-Za-z0-9]{${patternLength}}`, 
+        presetPattern: 'custom' 
+      }
+    } else if (ruleType === 'increment') {
+      // 序列默认配置：开始1，递增1，最大值与生成数量一致
+      const defaultMaxValue = taskConfig.value.totalRows || 1000
+      return { 
+        startValue: 1, 
+        step: 1, 
+        cycle: false, 
+        maxValue: defaultMaxValue,
+        format: '',
+        precision: 0,
+        scale: 0
+      }
     } else if (ruleType === 'function') {
       // 根据字段类型选择默认函数
       const type = (field.go_type || field.GoType || field.fieldType || '').toLowerCase()
       if (type.includes('time') || type.includes('date') || type.includes('timestamp')) {
         return { funcName: 'NOW', params: [] }
       } else {
-        return { funcName: 'UUID', params: [] }
+        // UUID 默认配置：大小写混合，带-
+        return { 
+          funcName: 'UUID', 
+          params: [],
+          case: 'mixed',
+          withHyphen: true
+        }
       }
     } else if (ruleType === 'template') {
       return { template: '' }
@@ -1572,10 +1859,14 @@
     const type = (field.go_type || field.GoType || '').toLowerCase()
     
     if (type.includes('int')) {
+      // INT 类型：默认 0-1000 的整数，固定为整数，但要在字段范围内
+      const range = getNumericFieldRange(field)
+      const defaultMax = Math.min(1000, range.max)
+      const defaultMin = Math.max(0, range.min)
       return { 
-        min: 1, 
-        max: 1000000, 
-        isInt: true,
+        min: defaultMin, 
+        max: defaultMax, 
+        isInt: true,  // INT 类型固定为整数，不能选择小数
         step: 0,
         precision: 0,
         scale: 0,
@@ -1585,14 +1876,18 @@
         stdDev: 0,
         lambda: 0
       }
-    } else if (type.includes('float') || type.includes('decimal')) {
+    } else if (type.includes('float') || type.includes('decimal') || type.includes('numeric')) {
+      // 浮点类型：默认 0-1000，可以选择整数或小数，可以设置小数位数，但要在字段范围内
+      const range = getNumericFieldRange(field)
+      const defaultMax = Math.min(1000, range.max)
+      const defaultMin = Math.max(0, range.min)
       return { 
-        min: 0, 
-        max: 10000, 
-        isInt: false,
+        min: defaultMin, 
+        max: defaultMax, 
+        isInt: true,  // 默认整数，但可以改为小数
         step: 0,
         precision: 0,
-        scale: 0,
+        scale: 2,  // 默认2位小数（如果选择小数）
         fixedLength: 0,
         distribution: 'uniform',
         mean: 0,
@@ -1600,10 +1895,23 @@
         lambda: 0
       }
     } else if (type.includes('time') || type.includes('date')) {
+      // 默认时间范围：2001-01-01 到今天
+      const today = new Date()
+      const todayStr = today.getFullYear() + '-' + 
+        String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+        String(today.getDate()).padStart(2, '0')
+      
+      // 判断是否为日期时间类型
+      const fieldType = (field.fieldType || field.type || '').toLowerCase()
+      const isTimestamp = fieldType.includes('timestamp') || fieldType.includes('datetime')
+      
       return { 
-        startDate: '', 
-        endDate: '', 
+        startDate: '2001-01-01', 
+        endDate: todayStr, 
         format: '',
+        fullDay: isTimestamp ? true : false, // 日期时间类型默认一整天
+        startTime: isTimestamp ? '09:00:00' : '', // 日期时间类型默认开始时间
+        endTime: isTimestamp ? '18:00:00' : '', // 日期时间类型默认结束时间
         yearRange: [],
         yearList: [],
         monthRange: [],
@@ -1617,22 +1925,44 @@
         secondRange: [],
         secondList: [],
         weekdayList: [],
+        weekdayMode: 'all', // 'all' | 'weekdays' | 'custom'
+        weekdayCustom: [1, 2, 3, 4, 5], // 默认选中周一到周五
         onlyWeekdays: false,
         onlyWeekends: false
       }
     } else if (type === 'bool') {
       return { values: [true, false], valuesText: 'true,false' }
     } else {
-      return { 
-        minLength: 5, 
-        maxLength: 20, 
-        charSet: 'all',
-        fixedLength: 0,
-        case: 'mixed',
-        numberPosition: 'none',
-        prefix: '',
-        suffix: '',
-        customChars: ''
+      // 检查是否为 TEXT 类型
+      const fieldType = (field.fieldType || field.type || '').toLowerCase()
+      const isTextType = fieldType.includes('text') || fieldType.includes('clob')
+      
+      if (isTextType) {
+        // TEXT 类型：默认 100-10000 长度的字符串
+        return { 
+          minLength: 100, 
+          maxLength: 10000, 
+          charSet: 'all',
+          fixedLength: 0,
+          case: 'mixed',
+          numberPosition: 'none',
+          prefix: '',
+          suffix: '',
+          customChars: ''
+        }
+      } else {
+        // 其他字符串类型：默认 5-20 长度的字符串
+        return { 
+          minLength: 5, 
+          maxLength: 20, 
+          charSet: 'all',
+          fixedLength: 0,
+          case: 'mixed',
+          numberPosition: 'none',
+          prefix: '',
+          suffix: '',
+          customChars: ''
+        }
       }
     }
   }
@@ -1640,6 +1970,12 @@
   const onRuleTypeChange = (field) => {
     // 切换规则类型时重置配置
     field.config = getDefaultConfig(field)
+    
+    // 如果是 INT 类型且规则是 random_number，强制设置为整数
+    if (isIntType(field) && field.ruleType === 'random_number') {
+      field.config.isInt = true
+    }
+    
     // 确保数组字段已初始化（防止访问 undefined）
     if (field.config && field.ruleType === 'random_date') {
       if (!field.config.yearRange || !Array.isArray(field.config.yearRange)) field.config.yearRange = []
@@ -1655,6 +1991,19 @@
       if (!field.config.minuteList || !Array.isArray(field.config.minuteList)) field.config.minuteList = []
       if (!field.config.secondList || !Array.isArray(field.config.secondList)) field.config.secondList = []
       if (!field.config.weekdayList || !Array.isArray(field.config.weekdayList)) field.config.weekdayList = []
+      // 初始化星期模式
+      if (!field.config.weekdayMode) field.config.weekdayMode = 'all'
+      if (!field.config.weekdayCustom || !Array.isArray(field.config.weekdayCustom)) {
+        field.config.weekdayCustom = [1, 2, 3, 4, 5]
+      }
+      // 根据模式设置 weekdayList
+      if (field.config.weekdayMode === 'all') {
+        field.config.weekdayList = []
+      } else if (field.config.weekdayMode === 'weekdays') {
+        field.config.weekdayList = [1, 2, 3, 4, 5]
+      } else if (field.config.weekdayMode === 'custom') {
+        field.config.weekdayList = field.config.weekdayCustom || []
+      }
       // 确保范围数组至少有2个元素
       if (field.config.yearRange.length < 2) field.config.yearRange = [1900, 2100]
       if (field.config.monthRange.length < 2) field.config.monthRange = [1, 12]
@@ -1662,6 +2011,16 @@
       if (field.config.hourRange.length < 2) field.config.hourRange = [0, 23]
       if (field.config.minuteRange.length < 2) field.config.minuteRange = [0, 59]
       if (field.config.secondRange.length < 2) field.config.secondRange = [0, 59]
+      // 设置默认日期范围
+      if (!field.config.startDate) {
+        field.config.startDate = '2001-01-01'
+      }
+      if (!field.config.endDate) {
+        const today = new Date()
+        field.config.endDate = today.getFullYear() + '-' + 
+          String(today.getMonth() + 1).padStart(2, '0') + '-' + 
+          String(today.getDate()).padStart(2, '0')
+      }
     }
     // 验证配置
     validateFieldRule(field)
@@ -1803,9 +2162,22 @@
           if (config.isInt === false) {
             return { valid: false, message: '整数类型字段不能使用浮点数规则' }
           }
+          // 检查数值范围是否在字段类型支持的范围内
+          const range = getNumericFieldRange(field)
+          const minValue = config.min || 0
+          const maxValue = config.max || 1000
+          if (minValue < range.min) {
+            return { valid: false, message: `最小值(${minValue})小于字段类型支持的最小值(${range.min})` }
+          }
+          if (maxValue > range.max) {
+            return { valid: false, message: `最大值(${maxValue})大于字段类型支持的最大值(${range.max})` }
+          }
+          if (minValue > maxValue) {
+            return { valid: false, message: `最小值(${minValue})不能大于最大值(${maxValue})` }
+          }
           // 检查数值范围是否在整数范围内
-          const maxInt = config.max || 1000
-          const minInt = config.min || 0
+          const maxInt = maxValue
+          const minInt = minValue
           if (maxInt > Number.MAX_SAFE_INTEGER || minInt < Number.MIN_SAFE_INTEGER) {
             return { valid: false, message: '数值范围超出整数范围' }
           }
@@ -1816,6 +2188,19 @@
           const stepVal = config.step || 1
           if (!Number.isInteger(startVal) || !Number.isInteger(stepVal)) {
             return { valid: false, message: '整数类型字段的递增起始值和步长必须是整数' }
+          }
+          // 检查递增起始值是否在字段类型支持的范围内
+          const incrementRange = getNumericFieldRange(field)
+          if (startVal < incrementRange.min) {
+            return { valid: false, message: `递增起始值(${startVal})小于字段类型支持的最小值(${incrementRange.min})` }
+          }
+          if (startVal > incrementRange.max) {
+            return { valid: false, message: `递增起始值(${startVal})大于字段类型支持的最大值(${incrementRange.max})` }
+          }
+          // 估算最大可能值（假设生成10000个值）
+          const estimatedMax = startVal + stepVal * 10000
+          if (estimatedMax > incrementRange.max) {
+            return { valid: false, message: `递增可能产生的最大值(${estimatedMax})超过字段类型支持的最大值(${incrementRange.max})，请调整起始值或步长` }
           }
           break
         
@@ -1845,10 +2230,23 @@
     if (goType.includes('float') || goType.includes('decimal') || goType.includes('numeric')) {
       switch (field.ruleType) {
         case 'random_number':
+          // 检查数值范围是否在字段类型支持的范围内
+          const floatRange = getNumericFieldRange(field)
+          const floatMinValue = config.min || 0
+          const floatMaxValue = config.max || 1000
+          if (floatMinValue < floatRange.min) {
+            return { valid: false, message: `最小值(${floatMinValue})小于字段类型支持的最小值(${floatRange.min})` }
+          }
+          if (floatMaxValue > floatRange.max) {
+            return { valid: false, message: `最大值(${floatMaxValue})大于字段类型支持的最大值(${floatRange.max})` }
+          }
+          if (floatMinValue > floatMaxValue) {
+            return { valid: false, message: `最小值(${floatMinValue})不能大于最大值(${floatMaxValue})` }
+          }
           // 检查精度和小数位数
           if (precision > 0) {
-            const maxNum = config.max || 1000
-            const minNum = config.min || 0
+            const maxNum = floatMaxValue
+            const minNum = floatMinValue
             // 估算整数部分的位数
             const intPartDigits = Math.max(String(Math.abs(Math.floor(maxNum))).length, String(Math.abs(Math.floor(minNum))).length)
             if (intPartDigits + scale > precision) {
@@ -2045,7 +2443,12 @@
   
   const parseListValues = (field) => {
     if (field.config.valuesText) {
-      field.config.values = field.config.valuesText.split(',').map(v => v.trim())
+      // 按行分割，过滤空行
+      field.config.values = field.config.valuesText.split('\n')
+        .map(v => v.trim())
+        .filter(v => v.length > 0)
+    } else {
+      field.config.values = []
     }
   }
   
@@ -2065,17 +2468,108 @@
     }
   }
   
-  // 根据字段类型获取可用的规则选项
+  // 判断是否为 INT 类型字段
+  const isIntType = (field) => {
+    const goType = (field.goType || '').toLowerCase()
+    const fieldType = (field.fieldType || '').toLowerCase()
+    // INT 类型：int, bigint, smallint, tinyint 等
+    return goType.includes('int') && !goType.includes('float') && !goType.includes('decimal') && !goType.includes('numeric')
+  }
+  
+  // 判断是否为浮点类型字段
+  const isFloatType = (field) => {
+    const goType = (field.goType || '').toLowerCase()
+    const fieldType = (field.fieldType || '').toLowerCase()
+    // 浮点类型：float, double, decimal, numeric
+    return goType.includes('float') || goType.includes('decimal') || goType.includes('numeric') || 
+           fieldType.includes('float') || fieldType.includes('double') || fieldType.includes('decimal') || fieldType.includes('numeric')
+  }
+  
+  // 判断是否为日期时间类型字段（TIMESTAMP, DATETIME等，包含时间部分）
+  const isTimestampType = (field) => {
+    const goType = (field.goType || field.go_type || '').toLowerCase()
+    const fieldType = (field.fieldType || field.field_type || field.type || '').toLowerCase()
+    // 日期时间类型：timestamp, datetime, timestamptz
+    return fieldType.includes('timestamp') || fieldType.includes('datetime') || 
+           goType.includes('time') && !goType.includes('date') && !fieldType.includes('date') && !fieldType.includes('time')
+  }
+  
+  // 获取数值类型字段的范围限制
+  const getNumericFieldRange = (field) => {
+    const fieldType = (field.fieldType || '').toLowerCase()
+    const goType = (field.goType || '').toLowerCase()
+    const precision = field.precision || field.Precision || 0
+    const scale = field.scale || field.Scale || 0
+    
+    // 整数类型
+    if (goType.includes('int') && !goType.includes('float') && !goType.includes('decimal')) {
+      if (fieldType.includes('tinyint')) {
+        // TINYINT: -128 到 127 (有符号) 或 0 到 255 (无符号)
+        // 默认假设有符号，但实际应该根据数据库配置判断，这里保守处理
+        return { min: -128, max: 127 }
+      } else if (fieldType.includes('smallint')) {
+        // SMALLINT: -32,768 到 32,767 (有符号) 或 0 到 65,535 (无符号)
+        return { min: -32768, max: 32767 }
+      } else if (fieldType.includes('mediumint')) {
+        // MEDIUMINT: -8,388,608 到 8,388,607 (有符号) 或 0 到 16,777,215 (无符号)
+        return { min: -8388608, max: 8388607 }
+      } else if (fieldType.includes('bigint')) {
+        // BIGINT: -9,223,372,036,854,775,808 到 9,223,372,036,854,775,807
+        // JavaScript 的 Number.MAX_SAFE_INTEGER 是 2^53 - 1，所以使用这个作为上限
+        return { min: Number.MIN_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER }
+      } else {
+        // INT: -2,147,483,648 到 2,147,483,647 (有符号) 或 0 到 4,294,967,295 (无符号)
+        return { min: -2147483648, max: 2147483647 }
+      }
+    }
+    
+    // 浮点类型
+    if (goType.includes('float') || goType.includes('double') || goType.includes('decimal') || goType.includes('numeric')) {
+      if (fieldType.includes('float')) {
+        // FLOAT: 约 -3.4E+38 到 3.4E+38
+        return { min: -3.4e38, max: 3.4e38 }
+      } else if (fieldType.includes('double')) {
+        // DOUBLE: 约 -1.7E+308 到 1.7E+308
+        return { min: -1.7e308, max: 1.7e308 }
+      } else if (fieldType.includes('decimal') || fieldType.includes('numeric')) {
+        // DECIMAL/NUMERIC: 根据 precision 和 scale 确定
+        // precision 是总位数，scale 是小数位数
+        // 例如 DECIMAL(10,2) 可以存储 -99999999.99 到 99999999.99
+        if (precision > 0 && scale >= 0 && scale <= precision) {
+          const maxIntegerDigits = precision - scale
+          // 计算最大值：例如 precision=10, scale=2，则整数部分最多8位，最大值是 99999999.99
+          // 整数部分最大值：10^8 - 1 = 99999999
+          // 小数部分最大值：0.99 (对于 scale=2)
+          const maxIntegerPart = Math.pow(10, maxIntegerDigits) - 1
+          const maxDecimalPart = scale > 0 ? (Math.pow(10, scale) - 1) / Math.pow(10, scale) : 0
+          const maxValue = maxIntegerPart + maxDecimalPart
+          const minValue = -maxValue
+          return { min: minValue, max: maxValue }
+        }
+        // 如果没有 precision，使用默认范围（但限制在安全范围内）
+        return { min: -999999999999.99, max: 999999999999.99 }
+      }
+    }
+    
+    // 默认范围（如果无法确定类型）
+    return { min: Number.MIN_SAFE_INTEGER, max: Number.MAX_SAFE_INTEGER }
+  }
+  
+  // 根据字段类型获取可用的规则选项（只保留常用规则）
   const getAvailableRules = (field) => {
-    const allRules = [
-      { label: '随机值', value: 'random_string' },
+    // 常用规则列表
+    const commonRules = [
+      { label: '随机文本', value: 'random_string' },
       { label: '随机数字', value: 'random_number' },
       { label: '随机日期', value: 'random_date' },
       { label: '固定值', value: 'fixed' },
-      { label: '递增', value: 'increment' },
       { label: '列表选择', value: 'list' },
-      { label: '正则表达式', value: 'regex' },
-      { label: '函数', value: 'function' },
+      { label: '正则表达式', value: 'regex' }
+    ]
+    
+    // 所有规则（用于特殊字段类型）
+    const allRules = [
+      ...commonRules,
       { label: '模板', value: 'template' },
       { label: '空值', value: 'null' },
       { label: '引用字段', value: 'reference' },
@@ -2087,68 +2581,61 @@
     const goType = (field.goType || '').toLowerCase()
     const fieldType = (field.fieldType || '').toLowerCase()
   
+    // 如果是主键或唯一约束，只支持 UUID 和序列
+    if (field.isPrimaryKey || field.isUnique) {
+      return [
+        { label: 'UUID', value: 'function' },
+        { label: '序列', value: 'increment' }
+      ]
+    }
+  
     // 如果是外键，只显示外键相关规则
     if (field.isForeignKey) {
       return [
         { label: '外键引用', value: 'foreign' },
-        { label: '固定值', value: 'fixed' },
-        { label: '空值', value: 'null' }
+        { label: '固定值', value: 'fixed' }
       ]
     }
   
-    // 根据 Go 类型过滤规则
+    // 根据 Go 类型过滤规则（只返回常用规则）
     if (goType.includes('int') || goType.includes('float') || goType.includes('decimal') || goType.includes('numeric')) {
       // 数字类型
       return [
         { label: '随机数字', value: 'random_number' },
         { label: '固定值', value: 'fixed' },
-        { label: '递增', value: 'increment' },
-        { label: '列表选择', value: 'list' },
-        { label: '函数', value: 'function' },
-        { label: '引用字段', value: 'reference' },
-        { label: '空值', value: 'null' }
+        { label: '序列', value: 'increment' },
+        { label: '列表选择', value: 'list' }
       ]
     } else if (goType.includes('time') || goType.includes('date')) {
       // 日期时间类型
       return [
         { label: '随机日期', value: 'random_date' },
-        { label: '固定值', value: 'fixed' },
-        { label: '函数', value: 'function' },
-        { label: '引用字段', value: 'reference' },
-        { label: '空值', value: 'null' }
+        { label: '固定值', value: 'fixed' }
       ]
     } else if (goType === 'bool' || goType === 'boolean') {
       // 布尔类型
       return [
         { label: '列表选择', value: 'list' },
-        { label: '固定值', value: 'fixed' },
-        { label: '空值', value: 'null' }
+        { label: '固定值', value: 'fixed' }
       ]
     } else if (goType.includes('[]byte') || goType.includes('bytea') || 
                fieldType.includes('blob') || fieldType.includes('binary') || fieldType.includes('bytea')) {
-      // 二进制类型
+      // 二进制类型（隐藏二进制规则，只保留固定值）
       return [
-        { label: '二进制/图片', value: 'binary' },
-        { label: '固定值', value: 'fixed' },
-        { label: '空值', value: 'null' }
+        { label: '固定值', value: 'fixed' }
       ]
     } else {
       // 字符串类型（varchar, char, text 等）
       // 字符串类型可以容纳数值、日期等类型（转换为字符串），所以支持更多规则
+      // 只返回常用规则
       return [
-        { label: '随机值', value: 'random_string' },
+        { label: '随机文本', value: 'random_string' },
         { label: '随机数字', value: 'random_number' }, // 可以转换为字符串
         { label: '随机日期', value: 'random_date' }, // 可以转换为字符串
         { label: '固定值', value: 'fixed' },
-        { label: '递增', value: 'increment' }, // 可以转换为字符串
+        { label: '序列', value: 'increment' }, // 可以转换为字符串
         { label: '列表选择', value: 'list' },
-        { label: '正则表达式', value: 'regex' },
-        { label: '函数', value: 'function' },
-        { label: '模板', value: 'template' },
-        { label: '引用字段', value: 'reference' },
-        { label: '地理数据', value: 'geographic' },
-        { label: '从文件读取', value: 'file' },
-        { label: '空值', value: 'null' }
+        { label: '正则表达式', value: 'regex' }
       ]
     }
   }
@@ -2163,16 +2650,25 @@
         ElMessage.error('配置无效，无法创建任务')
         return
       }
-  
+
       const taskName = taskConfig.value.name || `${tableName.value}_${Date.now()}`
       
-      await api.createTask(taskName, connectionId.value, config)
-      ElMessage.success('任务创建成功')
+      if (isEditMode.value) {
+        // 编辑模式：更新任务
+        await api.updateTask(taskId.value, taskName, connectionId.value, config)
+        ElMessage.success('任务更新成功')
+      } else {
+        // 创建模式：创建新任务
+        await api.createTask(taskName, connectionId.value, config)
+        ElMessage.success('任务创建成功')
+      }
+      
       // 清除缓存
       clearCache()
       router.push('/tasks')
     } catch (error) {
-      ElMessage.error('创建任务失败: ' + (error.formattedMessage || error.message))
+      const action = isEditMode.value ? '更新' : '创建'
+      ElMessage.error(`任务${action}失败: ` + (error.formattedMessage || error.message))
     } finally {
       actionLoading.value.set('createTask', false)
     }
@@ -2215,10 +2711,65 @@
             }
             break
           case 'random_date':
+            // 将日期格式转换为 ISO 8601 格式（如果只是日期，添加时间部分）
+            let startDate = field.config.startDate || ''
+            let endDate = field.config.endDate || ''
+            
+            // 判断是否为日期时间类型
+            const fieldType = (field.fieldType || field.type || '').toLowerCase()
+            const isTimestamp = fieldType.includes('timestamp') || fieldType.includes('datetime')
+            
+            // 如果日期格式是 YYYY-MM-DD，转换为 ISO 8601
+            if (startDate && startDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              if (isTimestamp && !field.config.fullDay && field.config.startTime) {
+                // 日期时间类型且不是一整天，使用配置的开始时间
+                startDate = startDate + 'T' + field.config.startTime + 'Z'
+              } else {
+                // 日期类型或一整天，使用默认时间
+                startDate = startDate + 'T00:00:00Z'
+              }
+            }
+            if (endDate && endDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              if (isTimestamp && !field.config.fullDay && field.config.endTime) {
+                // 日期时间类型且不是一整天，使用配置的结束时间
+                endDate = endDate + 'T' + field.config.endTime + 'Z'
+              } else {
+                // 日期类型或一整天，使用默认时间
+                endDate = endDate + 'T23:59:59Z'
+              }
+            }
+            
+            // 根据 weekdayMode 设置 weekday_list
+            let weekdayList = []
+            if (field.config.weekdayMode === 'all') {
+              weekdayList = []
+            } else if (field.config.weekdayMode === 'weekdays') {
+              weekdayList = [1, 2, 3, 4, 5]
+            } else if (field.config.weekdayMode === 'custom') {
+              weekdayList = field.config.weekdayCustom || []
+            } else {
+              // 兼容旧配置：直接使用 weekdayList
+              weekdayList = field.config.weekdayList || []
+            }
+            
+            // 根据时间配置设置 hourRange
+            let hourRange = []
+            if (isTimestamp && !field.config.fullDay && field.config.startTime && field.config.endTime) {
+              const startHour = parseInt(field.config.startTime.split(':')[0])
+              const endHour = parseInt(field.config.endTime.split(':')[0])
+              if (startHour >= 0 && startHour <= 23 && endHour >= 0 && endHour <= 23) {
+                hourRange = [startHour, endHour]
+              }
+            }
+            
             rule.config = {
-              start_date: field.config.startDate || '',
-              end_date: field.config.endDate || '',
-              format: field.config.format || ''
+              start_date: startDate,
+              end_date: endDate,
+              format: field.config.format || '',
+              hour_range: hourRange.length > 0 ? hourRange : undefined,
+              weekday_list: weekdayList,
+              only_weekdays: field.config.onlyWeekdays || false,
+              only_weekends: field.config.onlyWeekends || false
             }
             break
           case 'fixed':
@@ -2255,6 +2806,11 @@
             rule.config = {
               func_name: funcName,
               params: field.config.params || []
+            }
+            // 如果是 UUID，添加配置选项
+            if (funcName === 'UUID') {
+              rule.config.case = field.config.case || 'mixed'
+              rule.config.with_hyphen = field.config.withHyphen !== undefined ? field.config.withHyphen : true
             }
             break
           case 'template':
@@ -2464,10 +3020,38 @@
             }
             break
           case 'random_date':
+            // 将日期格式转换为 ISO 8601 格式（如果只是日期，添加时间部分）
+            let startDate4 = field.config.startDate || ''
+            let endDate4 = field.config.endDate || ''
+            
+            // 如果日期格式是 YYYY-MM-DD，转换为 ISO 8601
+            if (startDate4 && startDate4.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              startDate4 = startDate4 + 'T00:00:00Z'
+            }
+            if (endDate4 && endDate4.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              endDate4 = endDate4 + 'T23:59:59Z'
+            }
+            
+            // 根据 weekdayMode 设置 weekday_list
+            let weekdayList4 = []
+            if (field.config.weekdayMode === 'all') {
+              weekdayList4 = []
+            } else if (field.config.weekdayMode === 'weekdays') {
+              weekdayList4 = [1, 2, 3, 4, 5]
+            } else if (field.config.weekdayMode === 'custom') {
+              weekdayList4 = field.config.weekdayCustom || []
+            } else {
+              // 兼容旧配置：直接使用 weekdayList
+              weekdayList4 = field.config.weekdayList || []
+            }
+            
             rule.config = {
-              start_date: field.config.startDate || '',
-              end_date: field.config.endDate || '',
-              format: field.config.format || ''
+              start_date: startDate4,
+              end_date: endDate4,
+              format: field.config.format || '',
+              weekday_list: weekdayList4,
+              only_weekdays: field.config.onlyWeekdays || false,
+              only_weekends: field.config.onlyWeekends || false
             }
             break
           case 'fixed':
@@ -2504,6 +3088,11 @@
             rule.config = {
               func_name: funcName,
               params: field.config.params || []
+            }
+            // 如果是 UUID，添加配置选项
+            if (funcName === 'UUID') {
+              rule.config.case = field.config.case || 'mixed'
+              rule.config.with_hyphen = field.config.withHyphen !== undefined ? field.config.withHyphen : true
             }
             break
           case 'template':
@@ -2589,8 +3178,8 @@
   
       // 恢复基本信息
       taskConfig.value.totalRows = config.total_rows || 1000
-      taskConfig.value.batchSize = config.batch_size || 500
-      taskConfig.value.threadCount = 4
+      taskConfig.value.batchSize = config.batch_size || 1000
+      taskConfig.value.threadCount = 1  // 固定为1，单个任务不拆分多线程
   
       // 恢复字段规则
       fieldRules.value = config.field_rules.map(rule => {
@@ -2632,21 +3221,87 @@
             }
             break
           case 'random_date':
+            // 从 ISO 8601 格式转换为 YYYY-MM-DD 格式（如果包含时间部分）
+            let startDate8 = ruleConfig.start_date || ''
+            let endDate8 = ruleConfig.end_date || ''
+            
+            // 如果包含时间部分，提取日期和时间
+            let startTime8 = ''
+            let endTime8 = ''
+            if (startDate8 && startDate8.includes('T')) {
+              const parts = startDate8.split('T')
+              startDate8 = parts[0]
+              if (parts[1]) {
+                startTime8 = parts[1].replace('Z', '').substring(0, 8) // 提取 HH:mm:ss
+              }
+            }
+            if (endDate8 && endDate8.includes('T')) {
+              const parts = endDate8.split('T')
+              endDate8 = parts[0]
+              if (parts[1]) {
+                endTime8 = parts[1].replace('Z', '').substring(0, 8) // 提取 HH:mm:ss
+              }
+            }
+            
+            // 判断是否为日期时间类型
+            const fieldType8 = (field.field_type || field.type || '').toLowerCase()
+            const isTimestamp8 = fieldType8.includes('timestamp') || fieldType8.includes('datetime')
+            
+            // 根据 hour_range 判断是否为一整天
+            let fullDay8 = true
+            if (isTimestamp8 && ruleConfig.hour_range && Array.isArray(ruleConfig.hour_range) && ruleConfig.hour_range.length === 2) {
+              fullDay8 = false
+              // 如果没有从日期中提取到时间，使用 hour_range 推断
+              if (!startTime8) {
+                startTime8 = String(ruleConfig.hour_range[0]).padStart(2, '0') + ':00:00'
+              }
+              if (!endTime8) {
+                endTime8 = String(ruleConfig.hour_range[1]).padStart(2, '0') + ':00:00'
+              }
+            } else if (isTimestamp8 && (startTime8 || endTime8)) {
+              fullDay8 = false
+            }
+            
+            // 根据 weekday_list 设置 weekdayMode
+            let weekdayMode8 = 'all'
+            let weekdayCustom8 = []
+            if (ruleConfig.weekday_list && ruleConfig.weekday_list.length > 0) {
+              const weekdayList8 = ruleConfig.weekday_list
+              if (weekdayList8.length === 5 && weekdayList8.every(w => [1, 2, 3, 4, 5].includes(w))) {
+                weekdayMode8 = 'weekdays'
+              } else {
+                weekdayMode8 = 'custom'
+                weekdayCustom8 = weekdayList8
+              }
+            }
+            
             fieldRule.config = {
-              startDate: ruleConfig.start_date || '',
-              endDate: ruleConfig.end_date || '',
-              format: ruleConfig.format || ''
+              startDate: startDate8,
+              endDate: endDate8,
+              format: ruleConfig.format || '',
+              fullDay: fullDay8,
+              startTime: startTime8 || '09:00:00',
+              endTime: endTime8 || '18:00:00',
+              weekdayMode: weekdayMode8,
+              weekdayCustom: weekdayCustom8,
+              weekdayList: ruleConfig.weekday_list || [],
+              onlyWeekdays: ruleConfig.only_weekdays || false,
+              onlyWeekends: ruleConfig.only_weekends || false
             }
             break
           case 'fixed':
             fieldRule.config = { value: ruleConfig.value || '' }
             break
           case 'increment':
+            // 如果 max_value 为 0 或未设置，使用生成数量作为默认值
+            const defaultMaxValue = ruleConfig.max_value && ruleConfig.max_value > 0 
+              ? ruleConfig.max_value 
+              : (taskConfig.value.totalRows || 1000)
             fieldRule.config = {
               startValue: ruleConfig.start_value || 1,
               step: ruleConfig.step || 1,
               cycle: ruleConfig.cycle || false,
-              maxValue: ruleConfig.max_value || 0,
+              maxValue: defaultMaxValue,
               format: ruleConfig.format || '',
               precision: ruleConfig.precision || 0,
               scale: ruleConfig.scale || 0
@@ -2655,7 +3310,7 @@
           case 'list':
             fieldRule.config = {
               values: ruleConfig.values || [],
-              valuesText: (ruleConfig.values || []).join(','),
+              valuesText: (ruleConfig.values || []).join('\n'),
               allowRepeat: ruleConfig.allow_repeat !== undefined ? ruleConfig.allow_repeat : true,
               weights: ruleConfig.weights || [],
               weightsText: (ruleConfig.weights || []).join(',')
@@ -2683,6 +3338,11 @@
             fieldRule.config = {
               funcName: ruleConfig.func_name || 'UUID',
               params: ruleConfig.params || []
+            }
+            // 如果是 UUID，恢复配置选项
+            if (fieldRule.config.funcName === 'UUID') {
+              fieldRule.config.case = ruleConfig.case || 'mixed'
+              fieldRule.config.withHyphen = ruleConfig.with_hyphen !== undefined ? ruleConfig.with_hyphen : true
             }
             break
           case 'template':
@@ -2816,7 +3476,7 @@
           case 'list':
             fieldRule.config = {
               values: ruleConfig.values || [],
-              valuesText: (ruleConfig.values || []).join(','),
+              valuesText: (ruleConfig.values || []).join('\n'),
               allowRepeat: ruleConfig.allow_repeat !== undefined ? ruleConfig.allow_repeat : true,
               weights: ruleConfig.weights || [],
               weightsText: (ruleConfig.weights || []).join(',')
@@ -2844,6 +3504,11 @@
             fieldRule.config = {
               funcName: ruleConfig.func_name || 'UUID',
               params: ruleConfig.params || []
+            }
+            // 如果是 UUID，恢复配置选项
+            if (fieldRule.config.funcName === 'UUID') {
+              fieldRule.config.case = ruleConfig.case || 'mixed'
+              fieldRule.config.withHyphen = ruleConfig.with_hyphen !== undefined ? ruleConfig.with_hyphen : true
             }
             break
           case 'template':
@@ -2910,7 +3575,7 @@
   // 获取规则类型标签
   const getRuleTypeLabel = (ruleType) => {
     const labels = {
-      'random_string': '随机值',
+      'random_string': '随机文本',
       'random_number': '随机数字',
       'random_date': '随机日期',
       'fixed': '固定值',
@@ -3019,25 +3684,18 @@
     }
   }
   
-  // 获取批量设置可用的规则类型（根据选中的字段类型）
+  // 获取批量设置可用的规则类型（根据选中的字段类型，只返回常用规则）
   const getBatchAvailableRules = () => {
     if (selectedFields.value.length === 0) {
-      // 如果没有选中字段，返回所有规则
+      // 如果没有选中字段，返回常用规则
       return [
-        { label: '随机值', value: 'random_string' },
+        { label: '随机文本', value: 'random_string' },
         { label: '随机数字', value: 'random_number' },
         { label: '随机日期', value: 'random_date' },
         { label: '固定值', value: 'fixed' },
-        { label: '递增', value: 'increment' },
+        { label: '序列', value: 'increment' },
         { label: '列表选择', value: 'list' },
         { label: '正则表达式', value: 'regex' },
-        { label: '函数', value: 'function' },
-        { label: '模板', value: 'template' },
-        { label: '空值', value: 'null' },
-        { label: '引用字段', value: 'reference' },
-        { label: '地理数据', value: 'geographic' },
-        { label: '从文件读取', value: 'file' },
-        { label: '二进制/图片', value: 'binary' },
         { label: '外键引用', value: 'foreign' }
       ]
     }
@@ -3057,8 +3715,7 @@
       // 如果选中的字段中有外键，只显示外键相关规则
       return [
         { label: '外键引用', value: 'foreign' },
-        { label: '固定值', value: 'fixed' },
-        { label: '空值', value: 'null' }
+        { label: '固定值', value: 'fixed' }
       ]
     }
   
@@ -3090,60 +3747,44 @@
           return [
             { label: '随机数字', value: 'random_number' },
             { label: '固定值', value: 'fixed' },
-            { label: '递增', value: 'increment' },
-            { label: '列表选择', value: 'list' },
-            { label: '函数', value: 'function' },
-            { label: '引用字段', value: 'reference' },
-            { label: '空值', value: 'null' }
+            { label: '序列', value: 'increment' },
+            { label: '列表选择', value: 'list' }
           ]
         case 'datetime':
           return [
             { label: '随机日期', value: 'random_date' },
-            { label: '固定值', value: 'fixed' },
-            { label: '函数', value: 'function' },
-            { label: '引用字段', value: 'reference' },
-            { label: '空值', value: 'null' }
+            { label: '固定值', value: 'fixed' }
           ]
         case 'bool':
           return [
             { label: '列表选择', value: 'list' },
-            { label: '固定值', value: 'fixed' },
-            { label: '空值', value: 'null' }
+            { label: '固定值', value: 'fixed' }
           ]
         case 'binary':
           return [
-            { label: '二进制/图片', value: 'binary' },
-            { label: '固定值', value: 'fixed' },
-            { label: '空值', value: 'null' }
+            { label: '固定值', value: 'fixed' }
           ]
         case 'string':
         default:
           // 字符串类型可以容纳数值、日期等类型（转换为字符串），所以支持更多规则
+          // 只返回常用规则
           return [
-            { label: '随机值', value: 'random_string' },
+            { label: '随机文本', value: 'random_string' },
             { label: '随机数字', value: 'random_number' }, // 可以转换为字符串
             { label: '随机日期', value: 'random_date' }, // 可以转换为字符串
             { label: '固定值', value: 'fixed' },
-            { label: '递增', value: 'increment' }, // 可以转换为字符串
+            { label: '序列', value: 'increment' }, // 可以转换为字符串
             { label: '列表选择', value: 'list' },
-            { label: '正则表达式', value: 'regex' },
-            { label: '函数', value: 'function' },
-            { label: '模板', value: 'template' },
-            { label: '引用字段', value: 'reference' },
-            { label: '地理数据', value: 'geographic' },
-            { label: '从文件读取', value: 'file' },
-            { label: '空值', value: 'null' }
+            { label: '正则表达式', value: 'regex' }
           ]
       }
     }
   
     // 如果混合类型，返回所有字段都支持的通用规则
     // 注意：这种情况应该被 hasMixedFieldTypes() 检测到并阻止应用
+    // 只返回常用规则
     return [
-      { label: '固定值', value: 'fixed' },
-      { label: '函数', value: 'function' },
-      { label: '引用字段', value: 'reference' },
-      { label: '空值', value: 'null' }
+      { label: '固定值', value: 'fixed' }
     ]
   }
   
@@ -3397,6 +4038,12 @@
   
   // 返回上一页，保持左侧树的展开状态
   const handleBack = () => {
+    // 如果是编辑模式，返回到任务列表
+    if (isEditMode.value) {
+      router.push('/tasks')
+      return
+    }
+    
     // 使用 push 而不是 back，这样可以保持路由状态
     // 如果是从数据库选择页面来的，返回到数据库选择页面
     if (route.query.database && route.query.connection_id) {

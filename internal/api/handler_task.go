@@ -216,6 +216,24 @@ func (h *Handler) ResumeTask(c *gin.Context) {
 	h.sendSuccess(c, nil, "任务已恢复")
 }
 
+// RollbackTask 回滚任务
+func (h *Handler) RollbackTask(c *gin.Context) {
+	taskID := c.Param("id")
+	if taskID == "" {
+		h.sendError(c, http.StatusBadRequest, ErrCodeInvalidRequest, "任务ID不能为空")
+		return
+	}
+
+	if err := h.taskManager.RollbackTask(taskID); err != nil {
+		h.logger.Warn("回滚任务失败", zap.Error(err), zap.String("task_id", taskID))
+		h.sendError(c, http.StatusBadRequest, ErrCodeTaskNotRunning, "回滚任务失败", err.Error())
+		return
+	}
+
+	h.logger.Info("回滚任务成功", zap.String("task_id", taskID))
+	h.sendSuccess(c, nil, "任务已回滚")
+}
+
 // StopTask 停止任务
 func (h *Handler) StopTask(c *gin.Context) {
 	taskID := c.Param("id")
@@ -264,6 +282,36 @@ func (h *Handler) SetThreadCount(c *gin.Context) {
 
 	h.logger.Info("设置线程数成功", zap.String("task_id", taskID), zap.Int("count", req.Count))
 	h.sendSuccess(c, nil, "线程数已更新")
+}
+
+// UpdateTask 更新任务
+func (h *Handler) UpdateTask(c *gin.Context) {
+	taskID := c.Param("id")
+	if taskID == "" {
+		h.sendError(c, http.StatusBadRequest, ErrCodeInvalidRequest, "任务ID不能为空")
+		return
+	}
+
+	var req CreateTaskRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		h.logger.Warn("更新任务请求参数错误", zap.Error(err), zap.String("task_id", taskID))
+		h.sendError(c, http.StatusBadRequest, ErrCodeInvalidRequest, "请求参数错误", err.Error())
+		return
+	}
+
+	if req.Name == "" {
+		req.Name = req.Config.TableName
+	}
+
+	task, err := h.taskManager.UpdateTask(taskID, req.Name, req.ConnectionID, req.Config)
+	if err != nil {
+		h.logger.Error("更新任务失败", zap.Error(err), zap.String("task_id", taskID), zap.String("name", req.Name))
+		h.sendError(c, http.StatusBadRequest, ErrCodeTaskUpdateFailed, "更新任务失败", err.Error())
+		return
+	}
+
+	h.logger.Info("更新任务成功", zap.String("task_id", taskID), zap.String("name", req.Name))
+	h.sendSuccess(c, task, "任务已更新")
 }
 
 // DeleteTask 删除任务

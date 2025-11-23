@@ -62,7 +62,6 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column prop="thread_count" label="线程数" width="80" />
         <el-table-column label="开始时间" width="160">
           <template #default="scope">
             {{ scope.row.start_time ? formatTime(scope.row.start_time) : '-' }}
@@ -124,7 +123,6 @@
         <el-descriptions-item label="已生成">{{ selectedHistory.generated_rows || 0 }}</el-descriptions-item>
         <el-descriptions-item label="成功">{{ selectedHistory.success_rows || 0 }}</el-descriptions-item>
         <el-descriptions-item label="失败">{{ selectedHistory.failed_rows || 0 }}</el-descriptions-item>
-        <el-descriptions-item label="线程数">{{ selectedHistory.thread_count }}</el-descriptions-item>
         <el-descriptions-item label="开始时间" v-if="selectedHistory.start_time">
           {{ formatTime(selectedHistory.start_time) }}
         </el-descriptions-item>

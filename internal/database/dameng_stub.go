@@ -71,3 +71,19 @@ func (db *DamengDB) ExecuteNonQuery(database, query string, args ...interface{})
 func (db *DamengDB) GetVersion() (string, error) {
 	return "", fmt.Errorf("达梦数据库在此平台不支持")
 }
+
+func (db *DamengDB) BeginTransaction() error {
+	return fmt.Errorf("达梦数据库在此平台不支持")
+}
+
+func (db *DamengDB) CommitTransaction() error {
+	return fmt.Errorf("达梦数据库在此平台不支持")
+}
+
+func (db *DamengDB) RollbackTransaction() error {
+	return fmt.Errorf("达梦数据库在此平台不支持")
+}
+
+func (db *DamengDB) BatchInsertInTransaction(database, table string, rows []map[string]interface{}) error {
+	return fmt.Errorf("达梦数据库在此平台不支持")
+}

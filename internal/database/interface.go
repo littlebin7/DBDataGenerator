@@ -38,6 +38,13 @@ type Database interface {
 	// 批量插入数据
 	BatchInsert(database, table string, rows []map[string]interface{}) error
 
+	// 事务管理（用于任务级别的事务）
+	BeginTransaction() error
+	CommitTransaction() error
+	RollbackTransaction() error
+	// 在事务中批量插入数据（使用当前事务）
+	BatchInsertInTransaction(database, table string, rows []map[string]interface{}) error
+
 	// 获取关联表数据（用于外键）
 	GetForeignTableData(database, table, field string, limit int) ([]interface{}, error)
 

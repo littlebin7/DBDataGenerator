@@ -135,7 +135,6 @@
                 <span style="color: #F56C6C">{{ formatNumber(scope.row.failed_rows) }}</span>
               </template>
             </el-table-column>
-            <el-table-column prop="thread_count" label="线程数" width="100" />
             <el-table-column prop="eta" label="预计剩余时间" width="150">
               <template #default="scope">
                 {{ formatDuration(scope.row.eta) }}

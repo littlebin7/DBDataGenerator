@@ -34,6 +34,7 @@
           <el-option label="已完成" value="completed" />
           <el-option label="已停止" value="stopped" />
           <el-option label="错误" value="error" />
+          <el-option label="已回滚" value="rolled_back" />
         </el-select>
       </div>
 
@@ -98,17 +99,6 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="线程数" width="140">
-          <template #default="scope">
-            <el-input-number
-              v-model="scope.row.thread_count"
-              :min="1"
-              :max="20"
-              size="small"
-              @change="updateThreadCount(scope.row.id, scope.row.thread_count)"
-            />
-          </template>
-        </el-table-column>
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="scope">
             <div style="display: flex; flex-wrap: wrap; gap: 4px;">
@@ -152,6 +142,16 @@
                 恢复
               </el-button>
               <el-button 
+                v-if="scope.row.status === 'paused'"
+                size="small" 
+                type="danger"
+                :loading="getActionLoading(scope.row.id, 'rollback')"
+                :disabled="getActionLoading(scope.row.id)"
+                @click="rollbackTask(scope.row.id)"
+              >
+                回滚
+              </el-button>
+              <el-button 
                 v-if="scope.row.status === 'running' || scope.row.status === 'paused'"
                 size="small" 
                 type="danger"
@@ -160,6 +160,16 @@
                 @click="stopTask(scope.row.id)"
               >
                 停止
+              </el-button>
+              <el-button 
+                v-if="scope.row.status === 'pending' || scope.row.status === 'stopped' || scope.row.status === 'completed' || scope.row.status === 'error'"
+                size="small" 
+                type="primary"
+                :loading="getActionLoading(scope.row.id, 'edit')"
+                :disabled="getActionLoading(scope.row.id)"
+                @click="editTask(scope.row)"
+              >
+                编辑
               </el-button>
               <el-button 
                 size="small" 
@@ -203,7 +213,6 @@
           <el-descriptions-item label="成功">{{ selectedTask.success_rows || 0 }}</el-descriptions-item>
           <el-descriptions-item label="失败">{{ selectedTask.failed_rows || 0 }}</el-descriptions-item>
           <el-descriptions-item label="进度">{{ Math.round(selectedTask.progress || 0) }}%</el-descriptions-item>
-          <el-descriptions-item label="线程数">{{ selectedTask.thread_count }}</el-descriptions-item>
           <el-descriptions-item label="生成速度" v-if="selectedTask.speed > 0">
             {{ formatSpeed(selectedTask.speed) }}
           </el-descriptions-item>
@@ -259,6 +268,7 @@
 
 <script setup>
 import { ref, onMounted, computed, onUnmounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Search, Connection, CircleCheck, Loading, Warning } from '@element-plus/icons-vue'
 import api from '../api'
@@ -266,6 +276,8 @@ import { formatTime, formatDuration, formatSpeed } from '../utils/formatters'
 import { TASK_STATUS_TYPE, TASK_STATUS_TEXT, WS_CONNECTION_STATUS, WS_CONNECTION_STATUS_TEXT, WS_CONNECTION_STATUS_COLOR, RECONNECT_CONFIG } from '../utils/constants'
 import StatusTag from '../components/StatusTag.vue'
 import { useTaskStore } from '../stores/task'
+
+const router = useRouter()
 
 const taskStore = useTaskStore()
 
@@ -598,6 +610,26 @@ const resumeTask = async (taskId) => {
   }
 }
 
+const rollbackTask = async (taskId) => {
+  if (getActionLoading(taskId)) return
+  setActionLoading(taskId, 'rollback', true)
+  try {
+    await ElMessageBox.confirm('确定要回滚这个任务吗？回滚后任务将结束，已生成的数据将被删除。', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await taskStore.rollbackTask(taskId)
+    ElMessage.success('任务已回滚')
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('回滚任务失败: ' + (error.formattedMessage || error.message))
+    }
+  } finally {
+    setActionLoading(taskId, 'rollback', false)
+  }
+}
+
 const stopTask = async (taskId) => {
   if (getActionLoading(taskId)) return
   setActionLoading(taskId, 'stop', true)
@@ -618,17 +650,25 @@ const stopTask = async (taskId) => {
   }
 }
 
-const updateThreadCount = async (taskId, count) => {
-  if (getActionLoading(taskId, 'thread')) return
-  setActionLoading(taskId, 'thread', true)
+
+const editTask = async (task) => {
+  if (getActionLoading(task.id, 'edit')) return
+  setActionLoading(task.id, 'edit', true)
   try {
-    await taskStore.setThreadCount(taskId, count)
-    ElMessage.success('线程数已更新')
+    // 跳转到任务配置页面，传递任务ID和相关参数
+    router.push({
+      name: 'TaskConfig',
+      query: {
+        task_id: task.id,
+        table: task.table,
+        connection_id: task.connection_id,
+        database: task.database
+      }
+    })
   } catch (error) {
-    ElMessage.error('更新线程数失败: ' + (error.formattedMessage || error.message))
-    await taskStore.loadTasks() // 恢复原值
+    ElMessage.error('跳转失败: ' + (error.formattedMessage || error.message))
   } finally {
-    setActionLoading(taskId, 'thread', false)
+    setActionLoading(task.id, 'edit', false)
   }
 }
 

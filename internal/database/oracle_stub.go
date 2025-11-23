@@ -68,3 +68,19 @@ func (db *OracleDB) ExecuteNonQuery(database, query string, args ...interface{})
 func (db *OracleDB) GetVersion() (string, error) {
 	return "", fmt.Errorf("Oracle 数据库需要 CGO 和 Oracle Instant Client 库支持")
 }
+
+func (db *OracleDB) BeginTransaction() error {
+	return fmt.Errorf("Oracle 数据库需要 CGO 和 Oracle Instant Client 库支持")
+}
+
+func (db *OracleDB) CommitTransaction() error {
+	return fmt.Errorf("Oracle 数据库需要 CGO 和 Oracle Instant Client 库支持")
+}
+
+func (db *OracleDB) RollbackTransaction() error {
+	return fmt.Errorf("Oracle 数据库需要 CGO 和 Oracle Instant Client 库支持")
+}
+
+func (db *OracleDB) BatchInsertInTransaction(database, table string, rows []map[string]interface{}) error {
+	return fmt.Errorf("Oracle 数据库需要 CGO 和 Oracle Instant Client 库支持")
+}

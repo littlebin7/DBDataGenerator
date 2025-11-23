@@ -13,32 +13,24 @@ export function formatTime(timeStr) {
   let date
   // 如果是数字，直接作为时间戳处理
   if (typeof timeStr === 'number') {
-    // 如果时间戳为0或负数，返回'-'
-    if (timeStr <= 0) return '-'
     // 判断是秒还是毫秒（大于 10^12 的是毫秒，否则是秒）
     date = new Date(timeStr > 1e12 ? timeStr : timeStr * 1000)
   } else if (typeof timeStr === 'string') {
-    // 如果是字符串，先尝试直接解析为日期（支持 ISO 8601 格式）
-    date = new Date(timeStr)
-    
-    // 如果解析失败（NaN），再尝试作为时间戳解析
-    if (isNaN(date.getTime())) {
-      const timestamp = parseInt(timeStr, 10)
-      if (!isNaN(timestamp) && timestamp > 0) {
-        // 判断是秒还是毫秒（大于 10^12 的是毫秒，否则是秒）
-        date = new Date(timestamp > 1e12 ? timestamp : timestamp * 1000)
-      }
+    // 如果是字符串，先尝试解析为数字（Unix 时间戳）
+    const timestamp = parseInt(timeStr, 10)
+    if (!isNaN(timestamp) && timestamp > 0) {
+      // 判断是秒还是毫秒（大于 10^12 的是毫秒，否则是秒）
+      date = new Date(timestamp > 1e12 ? timestamp : timestamp * 1000)
+    } else {
+      // 如果不是数字字符串，尝试直接解析为日期
+      date = new Date(timeStr)
     }
   } else {
     // 如果是 Date 对象，直接使用
     date = timeStr
   }
   
-  // 检查日期是否有效，以及是否在合理范围内（1970年之后）
   if (isNaN(date.getTime())) return '-'
-  // 如果时间早于1970年1月2日（时间戳小于86400秒，即1天），认为是无效时间
-  if (date.getTime() < 86400000) return '-'
-  
   return date.toLocaleString('zh-CN', {
     year: 'numeric',
     month: '2-digit',

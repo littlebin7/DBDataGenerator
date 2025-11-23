@@ -88,16 +88,6 @@ func (m *Manager) broadcastTaskUpdate(task *Task) {
 	defer m.mu.Unlock()
 
 	taskID := task.ID
-	now := time.Now()
-
-	// 检查推送频率限制
-	if lastTime, exists := m.lastPushTime[taskID]; exists {
-		elapsed := now.Sub(lastTime)
-		if elapsed < MinPushInterval*time.Millisecond {
-			// 推送太频繁，跳过
-			return
-		}
-	}
 
 	// 获取当前任务状态
 	task.mu.RLock()
@@ -122,11 +112,10 @@ func (m *Manager) broadcastTaskUpdate(task *Task) {
 		// 检查状态是否变化
 		if lastState.Status != currentState.Status {
 			shouldPush = true // 状态变化，必须推送
-		} else if abs(currentState.Progress-lastState.Progress) >= ProgressChangeThreshold {
-			shouldPush = true // 进度变化超过阈值
+		} else if currentState.Progress != lastState.Progress {
+			shouldPush = true // 进度变化，立即推送
 		} else if currentState.GeneratedRows != lastState.GeneratedRows {
-			// 行数变化，但进度变化不大，检查是否超过最小推送间隔
-			// 这里已经通过频率限制检查了
+			// 行数变化，立即推送（每个批次完成都应该更新）
 			shouldPush = true
 		}
 		// 其他情况（如速度变化但进度未变化）不推送，减少网络流量
@@ -152,9 +141,48 @@ func (m *Manager) broadcastTaskUpdate(task *Task) {
 		})
 	}
 
-	// 更新推送状态和时间
+	// 更新推送状态（用于去重）
 	m.lastPushState[taskID] = currentState
-	m.lastPushTime[taskID] = now
+}
+
+// broadcastTaskUpdateImmediate 立即广播任务更新（不检查频率限制，用于任务完成等关键状态）
+func (m *Manager) broadcastTaskUpdateImmediate(task *Task) {
+	if m.wsHub == nil {
+		return
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// 执行推送（不检查频率限制）
+	if hub, ok := m.wsHub.(interface {
+		BroadcastToTask(taskID string, message interface{})
+	}); ok {
+		hub.BroadcastToTask(task.ID, map[string]interface{}{
+			"type": "task_update",
+			"task": task,
+		})
+	} else {
+		// 降级到普通广播
+		m.wsHub.Broadcast(map[string]interface{}{
+			"type": "task_update",
+			"task": task,
+		})
+	}
+
+	// 更新推送状态和时间（用于后续推送的去重）
+	task.mu.RLock()
+	currentState := &taskPushState{
+		Status:        task.Status,
+		Progress:      task.Progress,
+		GeneratedRows: task.GeneratedRows,
+		SuccessRows:   task.SuccessRows,
+		FailedRows:    task.FailedRows,
+		Speed:         task.Speed,
+	}
+	task.mu.RUnlock()
+
+	m.lastPushState[task.ID] = currentState
 }
 
 // abs 计算浮点数绝对值
@@ -200,6 +228,51 @@ func (m *Manager) GetTask(taskID string) (*Task, error) {
 	if !exists {
 		return nil, fmt.Errorf("任务不存在: %s", taskID)
 	}
+	return task, nil
+}
+
+// UpdateTask 更新任务配置（只能更新未运行的任务）
+func (m *Manager) UpdateTask(taskID, name, connectionID string, config *generator.TableConfig) (*Task, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	task, exists := m.tasks[taskID]
+	if !exists {
+		return nil, fmt.Errorf("任务不存在: %s", taskID)
+	}
+
+	// 只能更新未运行的任务
+	if task.Status == TaskStatusRunning || task.Status == TaskStatusPaused {
+		return nil, fmt.Errorf("无法更新正在运行或已暂停的任务")
+	}
+
+	// 更新任务信息
+	task.mu.Lock()
+	if name != "" {
+		task.Name = name
+	}
+	if connectionID != "" {
+		task.ConnectionID = connectionID
+	}
+	if config != nil {
+		task.Config = config
+		task.Database = config.Database
+		task.Table = config.TableName
+		task.TotalRows = config.TotalRows
+		// 重置进度（因为配置已更改）
+		task.GeneratedRows = 0
+		task.SuccessRows = 0
+		task.FailedRows = 0
+		task.Progress = 0
+		task.Speed = 0
+		task.ETA = 0
+		task.Error = ""
+	}
+	task.mu.Unlock()
+
+	// 保存到数据库
+	m.saveTaskToDB(task)
+
 	return task, nil
 }
 
@@ -319,24 +392,10 @@ func (m *Manager) saveTaskToDB(task *Task) {
 	}
 }
 
-// SetThreadCount 设置线程数
+// SetThreadCount 设置线程数（已禁用：单个任务固定为1个线程，不拆分多线程）
 func (m *Manager) SetThreadCount(taskID string, count int) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	task, exists := m.tasks[taskID]
-	if !exists {
-		return fmt.Errorf("任务不存在: %s", taskID)
-	}
-
-	task.ThreadCount = count
-
-	// 如果任务正在运行，更新协程池
-	if pool, exists := m.pools[taskID]; exists {
-		pool.SetThreadCount(count)
-	}
-
-	return nil
+	// 线程数设置已禁用，所有任务固定使用1个线程
+	return fmt.Errorf("线程数设置已禁用，所有任务固定使用1个线程")
 }
 
 // RetryTask 重试任务（重置状态并重新启动）
@@ -464,8 +523,21 @@ func (m *Manager) StartTask(taskID string) error {
 
 	// 设置任务完成回调
 	pool.SetCompleteCallback(func(t *Task) {
+		// 确保任务完成时设置了结束时间
+		if t.EndTime == nil {
+			now := time.Now()
+			t.EndTime = &now
+		}
+		// 确保进度是100%
+		t.mu.Lock()
+		if t.Progress < 100 {
+			t.Progress = 100
+		}
+		t.mu.Unlock()
+
 		m.saveTaskToDB(t)
-		m.broadcastTaskUpdate(t)
+		// 任务完成时，强制立即推送（绕过频率限制）
+		m.broadcastTaskUpdateImmediate(t)
 		m.saveTaskHistory(t)
 		// 调用外部设置的回调（用于创建回滚记录等）
 		m.mu.RLock()
@@ -540,6 +612,82 @@ func (m *Manager) ResumeTask(taskID string) error {
 		m.saveTaskToDB(task)
 		m.broadcastTaskUpdate(task)
 	}
+
+	return nil
+}
+
+// RollbackTask 回滚任务（只能在暂停状态下回滚）
+func (m *Manager) RollbackTask(taskID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	task, exists := m.tasks[taskID]
+	if !exists {
+		return fmt.Errorf("任务不存在: %s", taskID)
+	}
+
+	if task.Status != TaskStatusPaused {
+		return fmt.Errorf("只有暂停状态的任务可以回滚")
+	}
+
+	// 停止协程池（如果存在）
+	var pool *WorkerPool
+	if p, exists := m.pools[taskID]; exists {
+		pool = p
+		delete(m.pools, taskID)
+	}
+
+	// 停止监控协程
+	if stopChan, exists := m.monitors[taskID]; exists {
+		select {
+		case <-stopChan:
+			// 已经关闭
+		default:
+			close(stopChan)
+		}
+		delete(m.monitors, taskID)
+	}
+
+	// 清理推送状态缓存
+	delete(m.lastPushState, taskID)
+	delete(m.lastPushTime, taskID)
+
+	// 解锁后再执行可能较慢的操作
+	m.mu.Unlock()
+
+	// 异步停止协程池并回滚事务（带超时保护）
+	if pool != nil {
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					_ = r
+				}
+			}()
+			// 停止协程池（会自动回滚事务）
+			pool.StopWithTimeout(5 * time.Second)
+		}()
+	}
+
+	// 更新任务状态为回滚
+	m.mu.Lock()
+	now := time.Now()
+	task.EndTime = &now
+	task.SetStatus(TaskStatusRolledBack)
+	m.mu.Unlock()
+
+	// 立即广播状态更新
+	m.broadcastTaskUpdate(task)
+
+	// 异步保存到数据库和历史记录
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				_ = r
+			}
+		}()
+		m.saveTaskToDB(task)
+		m.saveTaskHistory(task)
+	}()
 
 	return nil
 }

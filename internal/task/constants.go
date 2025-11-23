@@ -1,8 +1,8 @@
 package task
 
 const (
-	// DefaultThreadCount 默认线程数
-	DefaultThreadCount = 4
+	// DefaultThreadCount 默认线程数（单个任务不拆分多线程，固定为1）
+	DefaultThreadCount = 1
 
 	// DefaultChannelBufferSize 默认 channel 缓冲区大小
 	DefaultChannelBufferSize = 100
@@ -10,9 +10,6 @@ const (
 	// MonitorInterval 任务监控间隔（毫秒）
 	MonitorInterval = 500
 
-	// MinPushInterval 最小推送间隔（毫秒）- 避免过度推送
-	MinPushInterval = 1000 // 1秒
-
-	// ProgressChangeThreshold 进度变化阈值（百分比）- 只有变化超过此值才推送
-	ProgressChangeThreshold = 0.5 // 0.5%
+	// 注意：已移除 MinPushInterval 和 ProgressChangeThreshold
+	// 现在每个批次完成都会推送更新，只通过去重机制避免重复推送相同状态
 )

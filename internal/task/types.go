@@ -11,12 +11,13 @@ import (
 type TaskStatus string
 
 const (
-	TaskStatusPending   TaskStatus = "pending"   // 待开始
-	TaskStatusRunning   TaskStatus = "running"   // 运行中
-	TaskStatusPaused    TaskStatus = "paused"    // 已暂停
-	TaskStatusCompleted TaskStatus = "completed" // 已完成
-	TaskStatusStopped   TaskStatus = "stopped"   // 已停止
-	TaskStatusError     TaskStatus = "error"     // 错误
+	TaskStatusPending    TaskStatus = "pending"     // 待开始
+	TaskStatusRunning    TaskStatus = "running"     // 运行中
+	TaskStatusPaused     TaskStatus = "paused"      // 已暂停
+	TaskStatusCompleted  TaskStatus = "completed"   // 已完成
+	TaskStatusStopped    TaskStatus = "stopped"     // 已停止
+	TaskStatusError      TaskStatus = "error"       // 错误
+	TaskStatusRolledBack TaskStatus = "rolled_back" // 已回滚
 )
 
 // Task 任务结构

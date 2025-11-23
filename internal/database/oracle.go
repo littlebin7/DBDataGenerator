@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+	"sync"
 
 	_ "github.com/godror/godror"
 )
@@ -13,6 +14,8 @@ import (
 type OracleDB struct {
 	db     *sql.DB
 	config *ConnectionConfig
+	tx     *sql.Tx // 任务级别的事务
+	txMu   sync.Mutex
 }
 
 func NewOracleDB() *OracleDB {
@@ -418,6 +421,107 @@ func (db *OracleDB) BatchInsert(database, table string, rows []map[string]interf
 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("提交事务失败: %w", err)
+	}
+
+	return nil
+}
+
+// BeginTransaction 开始任务级别的事务
+func (db *OracleDB) BeginTransaction() error {
+	db.txMu.Lock()
+	defer db.txMu.Unlock()
+
+	if db.tx != nil {
+		return fmt.Errorf("事务已存在")
+	}
+
+	if db.db == nil {
+		return fmt.Errorf("数据库未连接")
+	}
+
+	tx, err := db.db.Begin()
+	if err != nil {
+		return fmt.Errorf("开始事务失败: %w", err)
+	}
+
+	db.tx = tx
+	return nil
+}
+
+// CommitTransaction 提交事务
+func (db *OracleDB) CommitTransaction() error {
+	db.txMu.Lock()
+	defer db.txMu.Unlock()
+
+	if db.tx == nil {
+		return fmt.Errorf("没有活动的事务")
+	}
+
+	err := db.tx.Commit()
+	db.tx = nil
+	return err
+}
+
+// RollbackTransaction 回滚事务
+func (db *OracleDB) RollbackTransaction() error {
+	db.txMu.Lock()
+	defer db.txMu.Unlock()
+
+	if db.tx == nil {
+		return nil // 没有事务，直接返回
+	}
+
+	err := db.tx.Rollback()
+	db.tx = nil
+	return err
+}
+
+// BatchInsertInTransaction 在事务中批量插入
+func (db *OracleDB) BatchInsertInTransaction(database, table string, rows []map[string]interface{}) error {
+	if len(rows) == 0 {
+		return nil
+	}
+
+	db.txMu.Lock()
+	tx := db.tx
+	db.txMu.Unlock()
+
+	if tx == nil {
+		// 如果没有事务，使用原来的方法（向后兼容）
+		return db.BatchInsert(database, table, rows)
+	}
+
+	// 获取字段名
+	var fields []string
+	for fieldName := range rows[0] {
+		fields = append(fields, fieldName)
+	}
+
+	// 构建插入语句（Oracle 使用 :1, :2 作为占位符）
+	placeholders := make([]string, len(fields))
+	for i := range placeholders {
+		placeholders[i] = fmt.Sprintf(":%d", i+1)
+	}
+	query := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s)",
+		table, strings.Join(fields, ", "), strings.Join(placeholders, ", "))
+
+	// 在事务中准备语句
+	stmt, err := tx.Prepare(query)
+	if err != nil {
+		return fmt.Errorf("准备语句失败: %w", err)
+	}
+	defer stmt.Close()
+
+	// 批量插入
+	for _, row := range rows {
+		values := make([]interface{}, len(fields))
+		for i, field := range fields {
+			values[i] = row[field]
+		}
+
+		if _, err := stmt.Exec(values...); err != nil {
+			return fmt.Errorf("插入失败: %w", err)
+		}
 	}
 
 	return nil
