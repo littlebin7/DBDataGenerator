@@ -26,8 +26,20 @@ func (h *Handler) GetDatabases(c *gin.Context) {
 	}
 
 	if conn.Database == nil {
-		h.sendError(c, http.StatusBadRequest, ErrCodeConnectionFailed, "数据库连接未建立")
-		return
+		// 尝试自动重新连接
+		h.logger.Info("检测到连接断开，尝试自动重连", zap.String("connection_id", connectionID))
+		if err := h.connMgr.Reconnect(connectionID); err != nil {
+			h.logger.Warn("自动重连失败", zap.Error(err), zap.String("connection_id", connectionID))
+			h.sendError(c, http.StatusBadRequest, ErrCodeConnectionFailed, "数据库连接失败，请检查连接配置", err.Error())
+			return
+		}
+		// 重新获取连接
+		conn, err = h.connMgr.GetConnection(connectionID)
+		if err != nil || conn.Database == nil {
+			h.sendError(c, http.StatusBadRequest, ErrCodeConnectionFailed, "数据库连接失败，请检查连接配置")
+			return
+		}
+		h.logger.Info("自动重连成功", zap.String("connection_id", connectionID))
 	}
 
 	// 对于达梦数据库，返回包含用户信息的详细数据
@@ -73,8 +85,20 @@ func (h *Handler) GetTables(c *gin.Context) {
 	}
 
 	if conn.Database == nil {
-		h.sendError(c, http.StatusBadRequest, ErrCodeConnectionFailed, "数据库连接未建立")
-		return
+		// 尝试自动重新连接
+		h.logger.Info("检测到连接断开，尝试自动重连", zap.String("connection_id", connectionID))
+		if err := h.connMgr.Reconnect(connectionID); err != nil {
+			h.logger.Warn("自动重连失败", zap.Error(err), zap.String("connection_id", connectionID))
+			h.sendError(c, http.StatusBadRequest, ErrCodeConnectionFailed, "数据库连接失败，请检查连接配置", err.Error())
+			return
+		}
+		// 重新获取连接
+		conn, err = h.connMgr.GetConnection(connectionID)
+		if err != nil || conn.Database == nil {
+			h.sendError(c, http.StatusBadRequest, ErrCodeConnectionFailed, "数据库连接失败，请检查连接配置")
+			return
+		}
+		h.logger.Info("自动重连成功", zap.String("connection_id", connectionID))
 	}
 
 	tables, err := conn.Database.GetTables(database)
@@ -112,8 +136,20 @@ func (h *Handler) GetTableSchema(c *gin.Context) {
 	}
 
 	if conn.Database == nil {
-		h.sendError(c, http.StatusBadRequest, ErrCodeConnectionFailed, "数据库连接未建立")
-		return
+		// 尝试自动重新连接
+		h.logger.Info("检测到连接断开，尝试自动重连", zap.String("connection_id", connectionID))
+		if err := h.connMgr.Reconnect(connectionID); err != nil {
+			h.logger.Warn("自动重连失败", zap.Error(err), zap.String("connection_id", connectionID))
+			h.sendError(c, http.StatusBadRequest, ErrCodeConnectionFailed, "数据库连接失败，请检查连接配置", err.Error())
+			return
+		}
+		// 重新获取连接
+		conn, err = h.connMgr.GetConnection(connectionID)
+		if err != nil || conn.Database == nil {
+			h.sendError(c, http.StatusBadRequest, ErrCodeConnectionFailed, "数据库连接失败，请检查连接配置")
+			return
+		}
+		h.logger.Info("自动重连成功", zap.String("connection_id", connectionID))
 	}
 
 	schema, err := conn.Database.GetTableSchema(database, tableName)
@@ -162,8 +198,20 @@ func (h *Handler) GetTableCount(c *gin.Context) {
 	}
 
 	if conn.Database == nil {
-		h.sendError(c, http.StatusBadRequest, ErrCodeConnectionFailed, "数据库连接未建立")
-		return
+		// 尝试自动重新连接
+		h.logger.Info("检测到连接断开，尝试自动重连", zap.String("connection_id", connectionID))
+		if err := h.connMgr.Reconnect(connectionID); err != nil {
+			h.logger.Warn("自动重连失败", zap.Error(err), zap.String("connection_id", connectionID))
+			h.sendError(c, http.StatusBadRequest, ErrCodeConnectionFailed, "数据库连接失败，请检查连接配置", err.Error())
+			return
+		}
+		// 重新获取连接
+		conn, err = h.connMgr.GetConnection(connectionID)
+		if err != nil || conn.Database == nil {
+			h.sendError(c, http.StatusBadRequest, ErrCodeConnectionFailed, "数据库连接失败，请检查连接配置")
+			return
+		}
+		h.logger.Info("自动重连成功", zap.String("connection_id", connectionID))
 	}
 
 	count, err := conn.Database.GetTableCount(database, tableName)

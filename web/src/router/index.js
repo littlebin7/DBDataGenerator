@@ -63,11 +63,6 @@ const routes = [
     path: '/template',
     name: 'Template',
     component: () => import('../views/TemplateView.vue')
-  },
-  {
-    path: '/rollback',
-    name: 'Rollback',
-    component: () => import('../views/RollbackView.vue')
   }
 ]
 

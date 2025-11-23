@@ -56,7 +56,6 @@ const breadcrumbItems = computed(() => {
   else if (path === '/schedule') items.push('定时任务管理')
   else if (path === '/cascade') items.push('级联生成')
   else if (path === '/template') items.push('模板管理')
-  else if (path === '/rollback') items.push('数据回滚')
   return items
 })
 

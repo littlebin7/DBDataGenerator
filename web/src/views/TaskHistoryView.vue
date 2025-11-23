@@ -14,12 +14,29 @@
               <el-option label="已停止" value="stopped" />
               <el-option label="错误" value="error" />
             </el-select>
+            <el-button 
+              type="danger" 
+              :disabled="selectedHistoryIds.length === 0 || batchDeleteLoading"
+              :loading="batchDeleteLoading"
+              @click="batchDeleteHistory"
+              style="margin-right: 10px"
+            >
+              批量删除 ({{ selectedHistoryIds.length }})
+            </el-button>
             <el-button :icon="Refresh" @click="loadHistory" :loading="refreshLoading">刷新</el-button>
           </div>
         </div>
       </template>
 
-      <el-table :data="history" v-loading="loading" border stripe style="width: 100%">
+      <el-table 
+        :data="history" 
+        v-loading="loading" 
+        border 
+        stripe 
+        style="width: 100%"
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="55" />
         <el-table-column prop="task_name" label="任务名称" min-width="150" />
         <el-table-column prop="table_name" label="表名" width="150" />
         <el-table-column prop="database" label="数据库" width="120" />
@@ -126,30 +143,33 @@
             style="word-break: break-all; white-space: pre-wrap;"
           />
         </el-descriptions-item>
-        <el-descriptions-item label="字段规则配置" v-if="selectedHistory.config && selectedHistory.config.field_rules" :span="2">
-          <el-table 
-            :data="selectedHistory.config.field_rules" 
-            border 
-            stripe
-            max-height="400"
-            style="width: 100%"
-          >
-            <el-table-column prop="field_name" label="字段名" width="150" />
-            <el-table-column prop="rule_type" label="规则类型" width="120">
-              <template #default="scope">
-                {{ getRuleTypeLabel(scope.row.rule_type) }}
-              </template>
-            </el-table-column>
-            <el-table-column label="规则配置" min-width="300">
-              <template #default="scope">
-                <div style="font-size: 13px; line-height: 1.6; color: #606266">
-                  {{ formatConfig(scope.row.rule_type, scope.row.config) }}
-                </div>
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-descriptions-item>
       </el-descriptions>
+
+      <!-- 字段规则配置（单独显示） -->
+      <div v-if="selectedHistory.config && selectedHistory.config.field_rules" style="margin-top: 20px">
+        <el-divider>字段规则配置</el-divider>
+        <el-table 
+          :data="selectedHistory.config.field_rules" 
+          border 
+          stripe
+          max-height="400"
+          style="width: 100%"
+        >
+          <el-table-column prop="field_name" label="字段名" width="150" />
+          <el-table-column label="规则类型" width="150">
+            <template #default="scope">
+              <el-tag size="small" type="info">{{ getRuleTypeLabel(scope.row.rule_type) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="规则配置" min-width="300">
+            <template #default="scope">
+              <div style="font-size: 13px; line-height: 1.6; color: #606266">
+                {{ formatConfig(scope.row.rule_type, scope.row.config) }}
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
     </el-dialog>
 
       <div style="margin-top: 20px; display: flex; justify-content: space-between; align-items: center">
@@ -189,6 +209,10 @@ const pageSize = ref(50)
 const showDetailDialog = ref(false)
 const selectedHistory = ref(null)
 let isFirstLoad = true
+
+// 批量选择
+const selectedHistoryIds = ref([])
+const batchDeleteLoading = ref(false)
 
 // 操作按钮的 loading 状态
 const actionLoading = ref(new Map()) // 存储每个历史记录的按钮 loading 状态
@@ -261,6 +285,59 @@ const deleteHistory = async (historyId) => {
     }
   } finally {
     setActionLoading(historyId, 'delete', false)
+  }
+}
+
+// 处理表格选择变化
+const handleSelectionChange = (selection) => {
+  selectedHistoryIds.value = selection.map(item => item.id)
+}
+
+// 批量删除历史记录
+const batchDeleteHistory = async () => {
+  if (selectedHistoryIds.value.length === 0) {
+    ElMessage.warning('请选择要删除的历史记录')
+    return
+  }
+
+  if (batchDeleteLoading.value) return
+  batchDeleteLoading.value = true
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedHistoryIds.value.length} 条历史记录吗？`,
+      '确认批量删除',
+      {
+        type: 'warning',
+        confirmButtonText: '确定',
+        cancelButtonText: '取消'
+      }
+    )
+
+    const response = await api.batchDeleteTaskHistory(selectedHistoryIds.value)
+    
+    const successCount = response.count || 0
+    const errorCount = response.errors ? response.errors.length : 0
+
+    if (errorCount === 0) {
+      ElMessage.success(`成功删除 ${successCount} 条历史记录`)
+    } else {
+      ElMessage.warning(`成功删除 ${successCount} 条，失败 ${errorCount} 条`)
+      if (response.errors && response.errors.length > 0) {
+        console.error('批量删除错误:', response.errors)
+      }
+    }
+
+    // 清空选择
+    selectedHistoryIds.value = []
+    // 重新加载列表
+    await loadHistory()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('批量删除失败: ' + (error.formattedMessage || error.message))
+    }
+  } finally {
+    batchDeleteLoading.value = false
   }
 }
 

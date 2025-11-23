@@ -33,27 +33,52 @@ type TableConfig struct {
 
 // StringRandomConfig 字符串随机配置
 type StringRandomConfig struct {
-	MinLength   int    `json:"min_length"`   // 最小长度
-	MaxLength   int    `json:"max_length"`   // 最大长度
-	CharSet     string `json:"char_set"`     // 字符集：letters/numbers/chinese/special/all
-	CustomChars string `json:"custom_chars"` // 自定义字符集
-	Prefix      string `json:"prefix"`       // 前缀
-	Suffix      string `json:"suffix"`       // 后缀
+	MinLength      int    `json:"min_length"`      // 最小长度
+	MaxLength      int    `json:"max_length"`      // 最大长度
+	FixedLength    int    `json:"fixed_length"`    // 固定长度（可选，如果设置则忽略min/max）
+	CharSet        string `json:"char_set"`        // 字符集：letters/numbers/chinese/special/all
+	CustomChars    string `json:"custom_chars"`    // 自定义字符集
+	Prefix         string `json:"prefix"`          // 前缀
+	Suffix         string `json:"suffix"`          // 后缀
+	Case           string `json:"case"`            // 大小写：lower（小写）/upper（大写）/mixed（混合，默认）
+	NumberPosition string `json:"number_position"` // 数字位置：none（无数字）/start（开头）/end（结尾）/random（随机）
 }
 
 // NumberRandomConfig 数字随机配置
 type NumberRandomConfig struct {
-	Min   float64 `json:"min"`    // 最小值
-	Max   float64 `json:"max"`    // 最大值
-	Step  float64 `json:"step"`   // 步长（可选）
-	IsInt bool    `json:"is_int"` // 是否整数
+	Min          float64 `json:"min"`          // 最小值
+	Max          float64 `json:"max"`          // 最大值
+	Step         float64 `json:"step"`         // 步长（可选）
+	IsInt        bool    `json:"is_int"`       // 是否整数
+	Precision    int     `json:"precision"`    // 精度（总位数，可选）
+	Scale        int     `json:"scale"`        // 小数位数（可选）
+	FixedLength  int     `json:"fixed_length"` // 固定长度（用于字符串类型的数字，可选）
+	Distribution string  `json:"distribution"` // 分布类型：uniform（均匀，默认）/normal（正态）/exponential（指数）
+	Mean         float64 `json:"mean"`         // 均值（正态分布使用）
+	StdDev       float64 `json:"std_dev"`      // 标准差（正态分布使用）
+	Lambda       float64 `json:"lambda"`       // 参数（指数分布使用）
 }
 
 // DateRandomConfig 日期随机配置
 type DateRandomConfig struct {
-	StartDate string `json:"start_date"` // 开始日期（ISO 8601）
-	EndDate   string `json:"end_date"`   // 结束日期
-	Format    string `json:"format"`     // 输出格式
+	StartDate    string `json:"start_date"`    // 开始日期（ISO 8601）
+	EndDate      string `json:"end_date"`      // 结束日期
+	Format       string `json:"format"`        // 输出格式
+	YearRange    []int  `json:"year_range"`    // 年范围 [min, max]（可选，覆盖start_date/end_date的年）
+	YearList     []int  `json:"year_list"`     // 年列表（可选，指定特定年份）
+	MonthRange   []int  `json:"month_range"`   // 月范围 [min, max]（1-12，可选）
+	MonthList    []int  `json:"month_list"`    // 月列表（1-12，可选）
+	DayRange     []int  `json:"day_range"`     // 日范围 [min, max]（1-31，可选）
+	DayList      []int  `json:"day_list"`      // 日列表（1-31，可选）
+	HourRange    []int  `json:"hour_range"`    // 小时范围 [min, max]（0-23，可选）
+	HourList     []int  `json:"hour_list"`     // 小时列表（0-23，可选）
+	MinuteRange  []int  `json:"minute_range"`  // 分钟范围 [min, max]（0-59，可选）
+	MinuteList   []int  `json:"minute_list"`   // 分钟列表（0-59，可选）
+	SecondRange  []int  `json:"second_range"`  // 秒范围 [min, max]（0-59，可选）
+	SecondList   []int  `json:"second_list"`   // 秒列表（0-59，可选）
+	WeekdayList  []int  `json:"weekday_list"`  // 星期列表（0=周日, 1=周一, ..., 6=周六，可选）
+	OnlyWeekdays bool   `json:"only_weekdays"` // 仅工作日（周一到周五，可选）
+	OnlyWeekends bool   `json:"only_weekends"` // 仅周末（周六和周日，可选）
 }
 
 // FixedConfig 固定值配置
@@ -63,10 +88,13 @@ type FixedConfig struct {
 
 // IncrementConfig 递增配置
 type IncrementConfig struct {
-	StartValue int64 `json:"start_value"` // 起始值
-	Step       int64 `json:"step"`        // 步长（可为负数实现递减）
-	Cycle      bool  `json:"cycle"`       // 是否循环
-	MaxValue   int64 `json:"max_value"`   // 最大值（循环时使用）
+	StartValue int64  `json:"start_value"` // 起始值
+	Step       int64  `json:"step"`        // 步长（可为负数实现递减）
+	Cycle      bool   `json:"cycle"`       // 是否循环
+	MaxValue   int64  `json:"max_value"`   // 最大值（循环时使用）
+	Format     string `json:"format"`      // 格式（用于字符串类型，如 "USER_{:05d}" 表示 USER_00001）
+	Precision  int    `json:"precision"`   // 精度（用于数字类型，可选）
+	Scale      int    `json:"scale"`       // 小数位数（用于数字类型，可选）
 }
 
 // ListConfig 列表配置

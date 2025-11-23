@@ -4,7 +4,17 @@
       <template #header>
         <div style="display: flex; justify-content: space-between; align-items: center">
           <span>任务管理</span>
-          <el-button @click="loadTasks" :icon="Refresh" :loading="refreshLoading">刷新</el-button>
+          <div style="display: flex; gap: 10px;">
+            <el-button 
+              type="danger" 
+              :disabled="selectedTaskIds.length === 0 || batchDeleteLoading"
+              :loading="batchDeleteLoading"
+              @click="batchDeleteTasks"
+            >
+              批量删除 ({{ selectedTaskIds.length }})
+            </el-button>
+            <el-button @click="loadTasks" :icon="Refresh" :loading="refreshLoading">刷新</el-button>
+          </div>
         </div>
       </template>
 
@@ -27,7 +37,13 @@
         </el-select>
       </div>
 
-      <el-table :data="filteredTasks" style="width: 100%" v-loading="loading">
+      <el-table 
+        :data="filteredTasks" 
+        style="width: 100%" 
+        v-loading="loading"
+        @selection-change="handleSelectionChange"
+      >
+        <el-table-column type="selection" width="55" />
         <el-table-column prop="name" label="任务名" width="200" />
         <el-table-column prop="table" label="表名" width="150" />
         <el-table-column prop="connection_id" label="连接ID" width="200" />
@@ -82,7 +98,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="线程数" width="120">
+        <el-table-column label="线程数" width="140">
           <template #default="scope">
             <el-input-number
               v-model="scope.row.thread_count"
@@ -93,74 +109,76 @@
             />
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="400" fixed="right">
+        <el-table-column label="操作" width="280" fixed="right">
           <template #default="scope">
-            <el-button 
-              v-if="scope.row.status === 'pending' || scope.row.status === 'stopped'"
-              size="small" 
-              type="success"
-              :loading="getActionLoading(scope.row.id, 'start')"
-              :disabled="getActionLoading(scope.row.id)"
-              @click="startTask(scope.row.id)"
-            >
-              开始
-            </el-button>
-            <el-button 
-              v-if="scope.row.status === 'error' || scope.row.status === 'stopped'"
-              size="small" 
-              type="warning"
-              :loading="getActionLoading(scope.row.id, 'retry')"
-              :disabled="getActionLoading(scope.row.id)"
-              @click="retryTask(scope.row.id)"
-            >
-              重试
-            </el-button>
-            <el-button 
-              v-if="scope.row.status === 'running'"
-              size="small" 
-              :loading="getActionLoading(scope.row.id, 'pause')"
-              :disabled="getActionLoading(scope.row.id)"
-              @click="pauseTask(scope.row.id)"
-            >
-              暂停
-            </el-button>
-            <el-button 
-              v-if="scope.row.status === 'paused'"
-              size="small" 
-              type="warning"
-              :loading="getActionLoading(scope.row.id, 'resume')"
-              :disabled="getActionLoading(scope.row.id)"
-              @click="resumeTask(scope.row.id)"
-            >
-              恢复
-            </el-button>
-            <el-button 
-              v-if="scope.row.status === 'running' || scope.row.status === 'paused'"
-              size="small" 
-              type="danger"
-              :loading="getActionLoading(scope.row.id, 'stop')"
-              :disabled="getActionLoading(scope.row.id)"
-              @click="stopTask(scope.row.id)"
-            >
-              停止
-            </el-button>
-            <el-button 
-              size="small" 
-              :loading="getActionLoading(scope.row.id, 'detail')"
-              :disabled="getActionLoading(scope.row.id)"
-              @click="viewTaskDetail(scope.row)"
-            >
-              详情
-            </el-button>
-            <el-button 
-              size="small" 
-              type="danger"
-              :loading="getActionLoading(scope.row.id, 'delete')"
-              :disabled="getActionLoading(scope.row.id)"
-              @click="deleteTask(scope.row.id)"
-            >
-              删除
-            </el-button>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+              <el-button 
+                v-if="scope.row.status === 'pending' || scope.row.status === 'stopped' || scope.row.status === 'completed'"
+                size="small" 
+                type="success"
+                :loading="getActionLoading(scope.row.id, 'start')"
+                :disabled="getActionLoading(scope.row.id)"
+                @click="startTask(scope.row.id)"
+              >
+                {{ scope.row.status === 'completed' ? '再次执行' : '开始' }}
+              </el-button>
+              <el-button 
+                v-if="scope.row.status === 'error' || scope.row.status === 'stopped'"
+                size="small" 
+                type="warning"
+                :loading="getActionLoading(scope.row.id, 'retry')"
+                :disabled="getActionLoading(scope.row.id)"
+                @click="retryTask(scope.row.id)"
+              >
+                重试
+              </el-button>
+              <el-button 
+                v-if="scope.row.status === 'running'"
+                size="small" 
+                :loading="getActionLoading(scope.row.id, 'pause')"
+                :disabled="getActionLoading(scope.row.id)"
+                @click="pauseTask(scope.row.id)"
+              >
+                暂停
+              </el-button>
+              <el-button 
+                v-if="scope.row.status === 'paused'"
+                size="small" 
+                type="warning"
+                :loading="getActionLoading(scope.row.id, 'resume')"
+                :disabled="getActionLoading(scope.row.id)"
+                @click="resumeTask(scope.row.id)"
+              >
+                恢复
+              </el-button>
+              <el-button 
+                v-if="scope.row.status === 'running' || scope.row.status === 'paused'"
+                size="small" 
+                type="danger"
+                :loading="getActionLoading(scope.row.id, 'stop')"
+                :disabled="getActionLoading(scope.row.id)"
+                @click="stopTask(scope.row.id)"
+              >
+                停止
+              </el-button>
+              <el-button 
+                size="small" 
+                :loading="getActionLoading(scope.row.id, 'detail')"
+                :disabled="getActionLoading(scope.row.id)"
+                @click="viewTaskDetail(scope.row)"
+              >
+                详情
+              </el-button>
+              <el-button 
+                size="small" 
+                type="danger"
+                :loading="getActionLoading(scope.row.id, 'delete')"
+                :disabled="getActionLoading(scope.row.id)"
+                @click="deleteTask(scope.row.id)"
+              >
+                删除
+              </el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -263,6 +281,10 @@ let reconnectTimers = new Map() // 重连定时器映射
 const wsConnectionStatus = ref(new Map()) // WebSocket连接状态映射：'connected' | 'disconnected' | 'reconnecting'
 const MAX_RECONNECT_ATTEMPTS = RECONNECT_CONFIG.MAX_ATTEMPTS
 const RECONNECT_DELAY = RECONNECT_CONFIG.DELAY
+
+// 批量选择
+const selectedTaskIds = ref([])
+const batchDeleteLoading = ref(false)
 
 // 操作按钮的 loading 状态
 const actionLoading = ref(new Map()) // 存储每个任务的按钮 loading 状态
@@ -638,6 +660,59 @@ const deleteTask = async (taskId) => {
     if (error !== 'cancel') {
       ElMessage.error('删除任务失败: ' + (error.formattedMessage || error.message))
     }
+  }
+}
+
+// 处理表格选择变化
+const handleSelectionChange = (selection) => {
+  selectedTaskIds.value = selection.map(task => task.id)
+}
+
+// 批量删除任务
+const batchDeleteTasks = async () => {
+  if (selectedTaskIds.value.length === 0) {
+    ElMessage.warning('请选择要删除的任务')
+    return
+  }
+
+  if (batchDeleteLoading.value) return
+  batchDeleteLoading.value = true
+
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除选中的 ${selectedTaskIds.value.length} 个任务吗？`,
+      '确认批量删除',
+      {
+        type: 'warning',
+        confirmButtonText: '确定',
+        cancelButtonText: '取消'
+      }
+    )
+
+    const response = await api.batchDeleteTasks(selectedTaskIds.value)
+    
+    const successCount = response.count || 0
+    const errorCount = response.errors ? response.errors.length : 0
+
+    if (errorCount === 0) {
+      ElMessage.success(`成功删除 ${successCount} 个任务`)
+    } else {
+      ElMessage.warning(`成功删除 ${successCount} 个，失败 ${errorCount} 个`)
+      if (response.errors && response.errors.length > 0) {
+        console.error('批量删除错误:', response.errors)
+      }
+    }
+
+    // 清空选择
+    selectedTaskIds.value = []
+    // 重新加载任务列表
+    await taskStore.loadTasks()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('批量删除失败: ' + (error.formattedMessage || error.message))
+    }
+  } finally {
+    batchDeleteLoading.value = false
   }
 }
 

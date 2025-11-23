@@ -191,6 +191,33 @@ func (cm *ConnectionManagerDB) GetAllConnections() []*ConnectionInfo {
 	return connections
 }
 
+// CloseConnection 关闭连接（不断除配置）
+func (cm *ConnectionManagerDB) CloseConnection(connID string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	conn, exists := cm.connections[connID]
+	if !exists {
+		return fmt.Errorf("连接不存在: %s", connID)
+	}
+
+	// 断开连接
+	if conn.Database != nil {
+		conn.Database.Disconnect()
+		conn.Database = nil
+		conn.Connected = false
+	}
+
+	// 如果该连接是活动连接，取消活动状态
+	if conn.IsActive {
+		conn.IsActive = false
+		// 更新数据库中的活动状态
+		_, _ = cm.storage.GetDB().Exec("UPDATE connections SET is_active = 0, updated_at = ? WHERE id = ?", time.Now().Unix(), connID)
+	}
+
+	return nil
+}
+
 // RemoveConnection 移除连接
 func (cm *ConnectionManagerDB) RemoveConnection(connID string) error {
 	cm.mu.Lock()

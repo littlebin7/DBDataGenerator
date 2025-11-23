@@ -78,9 +78,9 @@
           <el-table-column label="规则类型" width="150">
             <template #default="scope">
               <el-select 
-                v-model="scope.row.ruleType" 
+                :model-value="scope.row.ruleType" 
+                @update:model-value="(val) => { scope.row.ruleType = val; onRuleTypeChange(scope.row); }"
                 placeholder="选择规则"
-                @change="onRuleTypeChange(scope.row)"
               >
                 <el-option 
                   v-for="rule in getAvailableRules(scope.row)" 
@@ -94,118 +94,473 @@
           <el-table-column label="规则配置" min-width="300">
             <template #default="scope">
               <!-- 随机字符串配置 -->
-              <div v-if="scope.row.ruleType === 'random_string'" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
-                <el-input-number 
-                  v-model="scope.row.config.minLength" 
-                  :min="1" 
-                  :max="scope.row.maxLength || 1000"
-                  placeholder="最小长度"
-                  size="small"
-                  style="width: 100px"
-                  @change="() => validateFieldRule(scope.row)"
-                />
-                <el-input-number 
-                  v-model="scope.row.config.maxLength" 
-                  :min="1" 
-                  :max="scope.row.maxLength || 1000"
-                  placeholder="最大长度"
-                  size="small"
-                  style="width: 100px"
-                  @change="() => validateFieldRule(scope.row)"
-                />
-                <el-select v-model="scope.row.config.charSet" size="small" style="width: 120px">
-                  <el-option label="字母" value="letters" />
-                  <el-option label="数字" value="numbers" />
-                  <el-option label="中文" value="chinese" />
-                  <el-option label="特殊字符" value="special" />
-                  <el-option label="全部" value="all" />
-                </el-select>
-                <el-tooltip
-                  v-if="getFieldBoundaryInfo(scope.row) || validateFieldRule(scope.row).valid === false"
-                  :content="validateFieldRule(scope.row).valid === false ? validateFieldRule(scope.row).message : getFieldBoundaryInfo(scope.row)"
-                  placement="top"
-                >
-                  <el-icon 
-                    :style="{ color: validateFieldRule(scope.row).valid === false ? '#F56C6C' : '#909399', cursor: 'pointer', fontSize: '16px' }"
+              <div v-if="scope.row.ruleType === 'random_string'" style="display: flex; flex-direction: column; gap: 10px">
+                <!-- 基础配置 -->
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
+                  <el-input-number 
+                    v-model="scope.row.config.minLength" 
+                    :min="1" 
+                    :max="scope.row.maxLength || 1000"
+                    placeholder="最小长度"
+                    size="small"
+                    style="width: 100px"
+                    @change="() => validateFieldRule(scope.row)"
+                  />
+                  <el-input-number 
+                    v-model="scope.row.config.maxLength" 
+                    :min="1" 
+                    :max="scope.row.maxLength || 1000"
+                    placeholder="最大长度"
+                    size="small"
+                    style="width: 100px"
+                    @change="() => validateFieldRule(scope.row)"
+                  />
+                  <el-select v-model="scope.row.config.charSet" size="small" style="width: 120px">
+                    <el-option label="字母" value="letters" />
+                    <el-option label="数字" value="numbers" />
+                    <el-option label="中文" value="chinese" />
+                    <el-option label="特殊字符" value="special" />
+                    <el-option label="全部" value="all" />
+                  </el-select>
+                  <el-tooltip
+                    v-if="getFieldBoundaryInfo(scope.row) || validateFieldRule(scope.row).valid === false"
+                    :content="validateFieldRule(scope.row).valid === false ? validateFieldRule(scope.row).message : getFieldBoundaryInfo(scope.row)"
+                    placement="top"
                   >
-                    <InfoFilled v-if="validateFieldRule(scope.row).valid !== false" />
-                    <WarningFilled v-else />
-                  </el-icon>
-                </el-tooltip>
+                    <el-icon 
+                      :style="{ color: validateFieldRule(scope.row).valid === false ? '#F56C6C' : '#909399', cursor: 'pointer', fontSize: '16px' }"
+                    >
+                      <InfoFilled v-if="validateFieldRule(scope.row).valid !== false" />
+                      <WarningFilled v-else />
+                    </el-icon>
+                  </el-tooltip>
+                </div>
+                <!-- 粒度配置（可折叠） -->
+                <el-collapse v-model="scope.row.showGranularity" style="border: none;">
+                  <el-collapse-item :name="scope.row.fieldName + '_granularity'" style="border: none;">
+                    <template #title>
+                      <span style="font-size: 12px; color: #909399;">高级配置（粒度控制）</span>
+                    </template>
+                    <div style="display: flex; flex-direction: column; gap: 10px; padding: 10px; background: #f5f7fa; border-radius: 4px;">
+                      <!-- 固定长度 -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">固定长度:</span>
+                        <el-input-number 
+                          v-model="scope.row.config.fixedLength" 
+                          :min="1"
+                          :max="scope.row.maxLength || 1000"
+                          placeholder="固定长度（可选）"
+                          size="small"
+                          style="width: 120px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                      </div>
+                      <!-- 大小写 -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">大小写:</span>
+                        <el-select v-model="scope.row.config.case" size="small" style="width: 150px">
+                          <el-option label="混合（默认）" value="mixed" />
+                          <el-option label="全小写" value="lower" />
+                          <el-option label="全大写" value="upper" />
+                        </el-select>
+                      </div>
+                      <!-- 数字位置 -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">数字位置:</span>
+                        <el-select v-model="scope.row.config.numberPosition" size="small" style="width: 150px">
+                          <el-option label="无数字" value="none" />
+                          <el-option label="开头" value="start" />
+                          <el-option label="结尾" value="end" />
+                          <el-option label="随机" value="random" />
+                        </el-select>
+                      </div>
+                      <!-- 前缀和后缀 -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">前缀:</span>
+                        <el-input 
+                          v-model="scope.row.config.prefix" 
+                          placeholder="前缀（可选）"
+                          size="small"
+                          style="width: 120px"
+                        />
+                        <span style="font-size: 12px; color: #909399;">后缀:</span>
+                        <el-input 
+                          v-model="scope.row.config.suffix" 
+                          placeholder="后缀（可选）"
+                          size="small"
+                          style="width: 120px"
+                        />
+                      </div>
+                      <!-- 自定义字符集 -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">自定义字符:</span>
+                        <el-input 
+                          v-model="scope.row.config.customChars" 
+                          placeholder="自定义字符集（可选）"
+                          size="small"
+                          style="flex: 1"
+                        />
+                      </div>
+                    </div>
+                  </el-collapse-item>
+                </el-collapse>
               </div>
   
               <!-- 随机数字配置 -->
-              <div v-if="scope.row.ruleType === 'random_number'" style="display: flex; gap: 10px; align-items: center">
-                <el-input-number 
-                  v-model="scope.row.config.min" 
-                  :precision="2"
-                  placeholder="最小值"
-                  size="small"
-                  style="width: 120px"
-                  @change="() => validateFieldRule(scope.row)"
-                />
-                <el-input-number 
-                  v-model="scope.row.config.max" 
-                  :precision="2"
-                  placeholder="最大值"
-                  size="small"
-                  style="width: 120px"
-                  @change="() => validateFieldRule(scope.row)"
-                />
-                <el-checkbox v-model="scope.row.config.isInt" size="small" @change="() => validateFieldRule(scope.row)">整数</el-checkbox>
-                <el-tooltip
-                  v-if="getFieldBoundaryInfo(scope.row) || validateFieldRule(scope.row).valid === false"
-                  :content="validateFieldRule(scope.row).valid === false ? validateFieldRule(scope.row).message : getFieldBoundaryInfo(scope.row)"
-                  placement="top"
-                >
-                  <el-icon 
-                    :style="{ color: validateFieldRule(scope.row).valid === false ? '#F56C6C' : '#909399', cursor: 'pointer', fontSize: '16px' }"
+              <div v-if="scope.row.ruleType === 'random_number'" style="display: flex; flex-direction: column; gap: 10px">
+                <!-- 基础配置 -->
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
+                  <el-input-number 
+                    v-model="scope.row.config.min" 
+                    :precision="2"
+                    placeholder="最小值"
+                    size="small"
+                    style="width: 120px"
+                    @change="() => validateFieldRule(scope.row)"
+                  />
+                  <el-input-number 
+                    v-model="scope.row.config.max" 
+                    :precision="2"
+                    placeholder="最大值"
+                    size="small"
+                    style="width: 120px"
+                    @change="() => validateFieldRule(scope.row)"
+                  />
+                  <el-checkbox v-model="scope.row.config.isInt" size="small" @change="() => validateFieldRule(scope.row)">整数</el-checkbox>
+                  <el-tooltip
+                    v-if="getFieldBoundaryInfo(scope.row) || validateFieldRule(scope.row).valid === false"
+                    :content="validateFieldRule(scope.row).valid === false ? validateFieldRule(scope.row).message : getFieldBoundaryInfo(scope.row)"
+                    placement="top"
                   >
-                    <InfoFilled v-if="validateFieldRule(scope.row).valid !== false" />
-                    <WarningFilled v-else />
-                  </el-icon>
-                </el-tooltip>
+                    <el-icon 
+                      :style="{ color: validateFieldRule(scope.row).valid === false ? '#F56C6C' : '#909399', cursor: 'pointer', fontSize: '16px' }"
+                    >
+                      <InfoFilled v-if="validateFieldRule(scope.row).valid !== false" />
+                      <WarningFilled v-else />
+                    </el-icon>
+                  </el-tooltip>
+                </div>
+                <!-- 粒度配置（可折叠） -->
+                <el-collapse v-model="scope.row.showGranularity" style="border: none;">
+                  <el-collapse-item :name="scope.row.fieldName + '_granularity'" style="border: none;">
+                    <template #title>
+                      <span style="font-size: 12px; color: #909399;">高级配置（粒度控制）</span>
+                    </template>
+                    <div style="display: flex; flex-direction: column; gap: 10px; padding: 10px; background: #f5f7fa; border-radius: 4px;">
+                      <!-- 步长 -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">步长:</span>
+                        <el-input-number 
+                          v-model="scope.row.config.step" 
+                          :precision="2"
+                          placeholder="步长（可选）"
+                          size="small"
+                          style="width: 120px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                      </div>
+                      <!-- 精度和小数位数 -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">精度:</span>
+                        <el-input-number 
+                          v-model="scope.row.config.precision" 
+                          :min="0"
+                          placeholder="总位数"
+                          size="small"
+                          style="width: 120px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                        <span style="font-size: 12px; color: #909399;">小数位:</span>
+                        <el-input-number 
+                          v-model="scope.row.config.scale" 
+                          :min="0"
+                          placeholder="小数位数"
+                          size="small"
+                          style="width: 120px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                      </div>
+                      <!-- 固定长度（用于字符串类型的数字） -->
+                      <div v-if="scope.row.fieldType.toLowerCase().includes('varchar') || scope.row.fieldType.toLowerCase().includes('char')" style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">固定长度:</span>
+                        <el-input-number 
+                          v-model="scope.row.config.fixedLength" 
+                          :min="1"
+                          :max="scope.row.maxLength || 1000"
+                          placeholder="固定长度（可选）"
+                          size="small"
+                          style="width: 120px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                      </div>
+                      <!-- 分布类型 -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">分布类型:</span>
+                        <el-select v-model="scope.row.config.distribution" size="small" style="width: 150px" @change="() => validateFieldRule(scope.row)">
+                          <el-option label="均匀分布" value="uniform" />
+                          <el-option label="正态分布" value="normal" />
+                          <el-option label="指数分布" value="exponential" />
+                        </el-select>
+                      </div>
+                      <!-- 正态分布参数 -->
+                      <div v-if="scope.row.config.distribution === 'normal'" style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">均值:</span>
+                        <el-input-number 
+                          v-model="scope.row.config.mean" 
+                          :precision="2"
+                          placeholder="均值"
+                          size="small"
+                          style="width: 120px"
+                        />
+                        <span style="font-size: 12px; color: #909399;">标准差:</span>
+                        <el-input-number 
+                          v-model="scope.row.config.stdDev" 
+                          :precision="2"
+                          :min="0"
+                          placeholder="标准差"
+                          size="small"
+                          style="width: 120px"
+                        />
+                      </div>
+                      <!-- 指数分布参数 -->
+                      <div v-if="scope.row.config.distribution === 'exponential'" style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">Lambda:</span>
+                        <el-input-number 
+                          v-model="scope.row.config.lambda" 
+                          :precision="4"
+                          :min="0.0001"
+                          placeholder="Lambda参数"
+                          size="small"
+                          style="width: 120px"
+                        />
+                      </div>
+                    </div>
+                  </el-collapse-item>
+                </el-collapse>
               </div>
   
               <!-- 随机日期配置 -->
-              <div v-if="scope.row.ruleType === 'random_date'" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
-                <el-date-picker
-                  v-model="scope.row.config.startDate"
-                  type="datetime"
-                  placeholder="开始日期"
-                  size="small"
-                  style="width: 180px"
-                  value-format="YYYY-MM-DDTHH:mm:ssZ"
-                  @change="() => validateFieldRule(scope.row)"
-                />
-                <el-date-picker
-                  v-model="scope.row.config.endDate"
-                  type="datetime"
-                  placeholder="结束日期"
-                  size="small"
-                  style="width: 180px"
-                  value-format="YYYY-MM-DDTHH:mm:ssZ"
-                  @change="() => validateFieldRule(scope.row)"
-                />
-                <el-input 
-                  v-model="scope.row.config.format" 
-                  placeholder="日期格式（可选）"
-                  size="small"
-                  style="width: 150px"
-                  @blur="() => validateFieldRule(scope.row)"
-                />
-                <el-tooltip
-                  v-if="getFieldBoundaryInfo(scope.row) || validateFieldRule(scope.row).valid === false"
-                  :content="validateFieldRule(scope.row).valid === false ? validateFieldRule(scope.row).message : getFieldBoundaryInfo(scope.row)"
-                  placement="top"
-                >
-                  <el-icon 
-                    :style="{ color: validateFieldRule(scope.row).valid === false ? '#F56C6C' : '#909399', cursor: 'pointer', fontSize: '16px' }"
+              <div v-if="scope.row.ruleType === 'random_date'" style="display: flex; flex-direction: column; gap: 10px">
+                <!-- 基础配置 -->
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
+                  <el-date-picker
+                    v-model="scope.row.config.startDate"
+                    type="datetime"
+                    placeholder="开始日期"
+                    size="small"
+                    style="width: 180px"
+                    value-format="YYYY-MM-DDTHH:mm:ssZ"
+                    @change="() => validateFieldRule(scope.row)"
+                  />
+                  <el-date-picker
+                    v-model="scope.row.config.endDate"
+                    type="datetime"
+                    placeholder="结束日期"
+                    size="small"
+                    style="width: 180px"
+                    value-format="YYYY-MM-DDTHH:mm:ssZ"
+                    @change="() => validateFieldRule(scope.row)"
+                  />
+                  <el-input 
+                    v-model="scope.row.config.format" 
+                    placeholder="日期格式（可选）"
+                    size="small"
+                    style="width: 150px"
+                    @blur="() => validateFieldRule(scope.row)"
+                  />
+                  <el-tooltip
+                    v-if="getFieldBoundaryInfo(scope.row) || validateFieldRule(scope.row).valid === false"
+                    :content="validateFieldRule(scope.row).valid === false ? validateFieldRule(scope.row).message : getFieldBoundaryInfo(scope.row)"
+                    placement="top"
                   >
-                    <InfoFilled v-if="validateFieldRule(scope.row).valid !== false" />
-                    <WarningFilled v-else />
-                  </el-icon>
-                </el-tooltip>
+                    <el-icon 
+                      :style="{ color: validateFieldRule(scope.row).valid === false ? '#F56C6C' : '#909399', cursor: 'pointer', fontSize: '16px' }"
+                    >
+                      <InfoFilled v-if="validateFieldRule(scope.row).valid !== false" />
+                      <WarningFilled v-else />
+                    </el-icon>
+                  </el-tooltip>
+                </div>
+                <!-- 粒度配置（可折叠） -->
+                <el-collapse v-model="scope.row.showGranularity" style="border: none;">
+                  <el-collapse-item :name="scope.row.fieldName + '_granularity'" style="border: none;">
+                    <template #title>
+                      <span style="font-size: 12px; color: #909399;">高级配置（粒度控制）</span>
+                    </template>
+                    <div style="display: flex; flex-direction: column; gap: 10px; padding: 10px; background: #f5f7fa; border-radius: 4px;">
+                      <!-- 年 -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">年:</span>
+                        <el-input-number 
+                          v-model="scope.row.config.yearRange[0]" 
+                          :min="1900"
+                          :max="2100"
+                          placeholder="最小年"
+                          size="small"
+                          style="width: 100px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                        <span style="font-size: 12px;">~</span>
+                        <el-input-number 
+                          v-model="scope.row.config.yearRange[1]" 
+                          :min="1900"
+                          :max="2100"
+                          placeholder="最大年"
+                          size="small"
+                          style="width: 100px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                        <el-button size="small" text @click="scope.row.config.yearRange = null">清除</el-button>
+                      </div>
+                      <!-- 月 -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">月:</span>
+                        <el-input-number 
+                          v-model="scope.row.config.monthRange[0]" 
+                          :min="1"
+                          :max="12"
+                          placeholder="最小月"
+                          size="small"
+                          style="width: 100px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                        <span style="font-size: 12px;">~</span>
+                        <el-input-number 
+                          v-model="scope.row.config.monthRange[1]" 
+                          :min="1"
+                          :max="12"
+                          placeholder="最大月"
+                          size="small"
+                          style="width: 100px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                        <el-button size="small" text @click="scope.row.config.monthRange = null">清除</el-button>
+                      </div>
+                      <!-- 日 -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">日:</span>
+                        <el-input-number 
+                          v-model="scope.row.config.dayRange[0]" 
+                          :min="1"
+                          :max="31"
+                          placeholder="最小日"
+                          size="small"
+                          style="width: 100px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                        <span style="font-size: 12px;">~</span>
+                        <el-input-number 
+                          v-model="scope.row.config.dayRange[1]" 
+                          :min="1"
+                          :max="31"
+                          placeholder="最大日"
+                          size="small"
+                          style="width: 100px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                        <el-button size="small" text @click="scope.row.config.dayRange = null">清除</el-button>
+                      </div>
+                      <!-- 小时 -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">小时:</span>
+                        <el-input-number 
+                          v-model="scope.row.config.hourRange[0]" 
+                          :min="0"
+                          :max="23"
+                          placeholder="最小小时"
+                          size="small"
+                          style="width: 100px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                        <span style="font-size: 12px;">~</span>
+                        <el-input-number 
+                          v-model="scope.row.config.hourRange[1]" 
+                          :min="0"
+                          :max="23"
+                          placeholder="最大小时"
+                          size="small"
+                          style="width: 100px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                        <el-button size="small" text @click="scope.row.config.hourRange = null">清除</el-button>
+                      </div>
+                      <!-- 分钟 -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">分钟:</span>
+                        <el-input-number 
+                          v-model="scope.row.config.minuteRange[0]" 
+                          :min="0"
+                          :max="59"
+                          placeholder="最小分钟"
+                          size="small"
+                          style="width: 100px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                        <span style="font-size: 12px;">~</span>
+                        <el-input-number 
+                          v-model="scope.row.config.minuteRange[1]" 
+                          :min="0"
+                          :max="59"
+                          placeholder="最大分钟"
+                          size="small"
+                          style="width: 100px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                        <el-button size="small" text @click="scope.row.config.minuteRange = null">清除</el-button>
+                      </div>
+                      <!-- 秒 -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">秒:</span>
+                        <el-input-number 
+                          v-model="scope.row.config.secondRange[0]" 
+                          :min="0"
+                          :max="59"
+                          placeholder="最小秒"
+                          size="small"
+                          style="width: 100px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                        <span style="font-size: 12px;">~</span>
+                        <el-input-number 
+                          v-model="scope.row.config.secondRange[1]" 
+                          :min="0"
+                          :max="59"
+                          placeholder="最大秒"
+                          size="small"
+                          style="width: 100px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                        <el-button size="small" text @click="scope.row.config.secondRange = null">清除</el-button>
+                      </div>
+                      <!-- 星期 -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">星期:</span>
+                        <el-select 
+                          v-model="scope.row.config.weekdayList" 
+                          multiple
+                          placeholder="选择星期（0=周日, 1=周一...）"
+                          size="small"
+                          style="width: 200px"
+                          @change="() => validateFieldRule(scope.row)"
+                        >
+                          <el-option label="周日" :value="0" />
+                          <el-option label="周一" :value="1" />
+                          <el-option label="周二" :value="2" />
+                          <el-option label="周三" :value="3" />
+                          <el-option label="周四" :value="4" />
+                          <el-option label="周五" :value="5" />
+                          <el-option label="周六" :value="6" />
+                        </el-select>
+                        <el-button size="small" text @click="scope.row.config.weekdayList = []">清除</el-button>
+                      </div>
+                      <!-- 工作日/周末 -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <el-checkbox v-model="scope.row.config.onlyWeekdays" size="small" @change="() => { if(scope.row.config.onlyWeekdays) scope.row.config.onlyWeekends = false; validateFieldRule(scope.row) }">仅工作日（周一到周五）</el-checkbox>
+                        <el-checkbox v-model="scope.row.config.onlyWeekends" size="small" @change="() => { if(scope.row.config.onlyWeekends) scope.row.config.onlyWeekdays = false; validateFieldRule(scope.row) }">仅周末（周六和周日）</el-checkbox>
+                      </div>
+                    </div>
+                  </el-collapse-item>
+                </el-collapse>
               </div>
   
               <!-- 固定值配置 -->
@@ -232,57 +587,143 @@
               </div>
   
               <!-- 递增配置 -->
-              <div v-if="scope.row.ruleType === 'increment'" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
-                <el-input-number 
-                  v-model="scope.row.config.startValue" 
-                  placeholder="起始值"
-                  size="small"
-                  style="width: 120px"
-                  @change="() => validateFieldRule(scope.row)"
-                />
-                <el-input-number 
-                  v-model="scope.row.config.step" 
-                  placeholder="步长"
-                  size="small"
-                  style="width: 120px"
-                  @change="() => validateFieldRule(scope.row)"
-                />
-                <el-checkbox v-model="scope.row.config.cycle" size="small">循环</el-checkbox>
-                <el-tooltip
-                  v-if="getFieldBoundaryInfo(scope.row) || validateFieldRule(scope.row).valid === false"
-                  :content="validateFieldRule(scope.row).valid === false ? validateFieldRule(scope.row).message : getFieldBoundaryInfo(scope.row)"
-                  placement="top"
-                >
-                  <el-icon 
-                    :style="{ color: validateFieldRule(scope.row).valid === false ? '#F56C6C' : '#909399', cursor: 'pointer', fontSize: '16px' }"
+              <div v-if="scope.row.ruleType === 'increment'" style="display: flex; flex-direction: column; gap: 10px">
+                <!-- 基础配置 -->
+                <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
+                  <el-input-number 
+                    v-model="scope.row.config.startValue" 
+                    placeholder="起始值"
+                    size="small"
+                    style="width: 120px"
+                    @change="() => validateFieldRule(scope.row)"
+                  />
+                  <el-input-number 
+                    v-model="scope.row.config.step" 
+                    placeholder="步长"
+                    size="small"
+                    style="width: 120px"
+                    @change="() => validateFieldRule(scope.row)"
+                  />
+                  <el-checkbox v-model="scope.row.config.cycle" size="small">循环</el-checkbox>
+                  <el-tooltip
+                    v-if="getFieldBoundaryInfo(scope.row) || validateFieldRule(scope.row).valid === false"
+                    :content="validateFieldRule(scope.row).valid === false ? validateFieldRule(scope.row).message : getFieldBoundaryInfo(scope.row)"
+                    placement="top"
                   >
-                    <InfoFilled v-if="validateFieldRule(scope.row).valid !== false" />
-                    <WarningFilled v-else />
-                  </el-icon>
-                </el-tooltip>
+                    <el-icon 
+                      :style="{ color: validateFieldRule(scope.row).valid === false ? '#F56C6C' : '#909399', cursor: 'pointer', fontSize: '16px' }"
+                    >
+                      <InfoFilled v-if="validateFieldRule(scope.row).valid !== false" />
+                      <WarningFilled v-else />
+                    </el-icon>
+                  </el-tooltip>
+                </div>
+                <!-- 粒度配置（可折叠） -->
+                <el-collapse v-model="scope.row.showGranularity" style="border: none;">
+                  <el-collapse-item :name="scope.row.fieldName + '_granularity'" style="border: none;">
+                    <template #title>
+                      <span style="font-size: 12px; color: #909399;">高级配置（粒度控制）</span>
+                    </template>
+                    <div style="display: flex; flex-direction: column; gap: 10px; padding: 10px; background: #f5f7fa; border-radius: 4px;">
+                      <!-- 最大值（循环时使用） -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">最大值:</span>
+                        <el-input-number 
+                          v-model="scope.row.config.maxValue" 
+                          placeholder="最大值（循环时使用，0表示不限制）"
+                          size="small"
+                          style="width: 200px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                      </div>
+                      <!-- 格式（用于字符串类型） -->
+                      <div v-if="scope.row.fieldType.toLowerCase().includes('varchar') || scope.row.fieldType.toLowerCase().includes('char')" style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">格式:</span>
+                        <el-input 
+                          v-model="scope.row.config.format" 
+                          placeholder="格式（如 USER_{:05d} 表示 USER_00001）"
+                          size="small"
+                          style="flex: 1"
+                          @blur="() => validateFieldRule(scope.row)"
+                        />
+                      </div>
+                      <!-- 精度和小数位数（用于数字类型） -->
+                      <div v-if="scope.row.goType && (scope.row.goType.includes('int') || scope.row.goType.includes('float') || scope.row.goType.includes('decimal'))" style="display: flex; gap: 10px; align-items: center">
+                        <span style="width: 80px; font-size: 12px;">精度:</span>
+                        <el-input-number 
+                          v-model="scope.row.config.precision" 
+                          :min="0"
+                          placeholder="总位数"
+                          size="small"
+                          style="width: 120px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                        <span style="font-size: 12px; color: #909399;">小数位:</span>
+                        <el-input-number 
+                          v-model="scope.row.config.scale" 
+                          :min="0"
+                          placeholder="小数位数"
+                          size="small"
+                          style="width: 120px"
+                          @change="() => validateFieldRule(scope.row)"
+                        />
+                      </div>
+                    </div>
+                  </el-collapse-item>
+                </el-collapse>
               </div>
   
               <!-- 列表配置 -->
-              <div v-if="scope.row.ruleType === 'list'" style="display: flex; gap: 8px; align-items: center">
-                <el-input 
-                  v-model="scope.row.config.valuesText" 
-                  placeholder="输入值列表，用逗号分隔"
-                  size="small"
-                  style="flex: 1"
-                  @blur="() => { parseListValues(scope.row); validateFieldRule(scope.row) }"
-                />
-                <el-tooltip
-                  v-if="getFieldBoundaryInfo(scope.row) || validateFieldRule(scope.row).valid === false"
-                  :content="validateFieldRule(scope.row).valid === false ? validateFieldRule(scope.row).message : getFieldBoundaryInfo(scope.row)"
-                  placement="top"
-                >
-                  <el-icon 
-                    :style="{ color: validateFieldRule(scope.row).valid === false ? '#F56C6C' : '#909399', cursor: 'pointer', fontSize: '16px' }"
+              <div v-if="scope.row.ruleType === 'list'" style="display: flex; flex-direction: column; gap: 10px">
+                <!-- 基础配置 -->
+                <div style="display: flex; gap: 8px; align-items: center">
+                  <el-input 
+                    v-model="scope.row.config.valuesText" 
+                    placeholder="输入值列表，用逗号分隔"
+                    size="small"
+                    style="flex: 1"
+                    @blur="() => { parseListValues(scope.row); validateFieldRule(scope.row) }"
+                  />
+                  <el-tooltip
+                    v-if="getFieldBoundaryInfo(scope.row) || validateFieldRule(scope.row).valid === false"
+                    :content="validateFieldRule(scope.row).valid === false ? validateFieldRule(scope.row).message : getFieldBoundaryInfo(scope.row)"
+                    placement="top"
                   >
-                    <InfoFilled v-if="validateFieldRule(scope.row).valid !== false" />
-                    <WarningFilled v-else />
-                  </el-icon>
-                </el-tooltip>
+                    <el-icon 
+                      :style="{ color: validateFieldRule(scope.row).valid === false ? '#F56C6C' : '#909399', cursor: 'pointer', fontSize: '16px' }"
+                    >
+                      <InfoFilled v-if="validateFieldRule(scope.row).valid !== false" />
+                      <WarningFilled v-else />
+                    </el-icon>
+                  </el-tooltip>
+                </div>
+                <!-- 粒度配置（可折叠） -->
+                <el-collapse v-model="scope.row.showGranularity" style="border: none;">
+                  <el-collapse-item :name="scope.row.fieldName + '_granularity'" style="border: none;">
+                    <template #title>
+                      <span style="font-size: 12px; color: #909399;">高级配置（粒度控制）</span>
+                    </template>
+                    <div style="display: flex; flex-direction: column; gap: 10px; padding: 10px; background: #f5f7fa; border-radius: 4px;">
+                      <!-- 允许重复 -->
+                      <div style="display: flex; gap: 10px; align-items: center">
+                        <el-checkbox v-model="scope.row.config.allowRepeat" size="small" @change="() => validateFieldRule(scope.row)">允许重复选择</el-checkbox>
+                      </div>
+                      <!-- 权重配置 -->
+                      <div style="display: flex; flex-direction: column; gap: 5px">
+                        <span style="font-size: 12px; color: #606266;">权重配置（可选，控制选择概率）:</span>
+                        <el-input 
+                          v-model="scope.row.config.weightsText" 
+                          placeholder="输入权重列表，用逗号分隔，与值列表一一对应（如：1,2,1）"
+                          size="small"
+                          @blur="() => parseListWeights(scope.row)"
+                        />
+                        <div v-if="scope.row.config.weights && scope.row.config.weights.length > 0" style="font-size: 11px; color: #909399; margin-top: 5px;">
+                          当前权重: {{ scope.row.config.weights.join(', ') }}
+                        </div>
+                      </div>
+                    </div>
+                  </el-collapse-item>
+                </el-collapse>
               </div>
   
               <!-- 正则表达式配置 -->
@@ -365,7 +806,7 @@
               </div>
   
               <!-- 地理数据配置 -->
-              <div v-if="scope.row.ruleType === 'geographic'" style="display: flex; gap: 10px; flex-wrap: wrap">
+              <div v-if="scope.row.ruleType === 'geographic'" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
                 <el-select v-model="scope.row.config.type" size="small" style="width: 150px">
                   <el-option label="城市" value="city" />
                   <el-option label="国家" value="country" />
@@ -385,11 +826,14 @@
   
               <!-- 从文件读取配置 -->
               <div v-if="scope.row.ruleType === 'file'" style="display: flex; flex-direction: column; gap: 10px">
-                <el-input 
-                  v-model="scope.row.config.filePath" 
-                  placeholder="文件路径（绝对路径或相对路径）"
-                  size="small"
-                />
+                <div style="display: flex; gap: 8px; align-items: center">
+                  <el-input 
+                    v-model="scope.row.config.filePath" 
+                    placeholder="文件路径（绝对路径或相对路径）"
+                    size="small"
+                    style="flex: 1"
+                  />
+                </div>
                 <div style="display: flex; gap: 10px; flex-wrap: wrap">
                   <el-select v-model="scope.row.config.fileType" size="small" style="width: 120px">
                     <el-option label="CSV" value="csv" />
@@ -409,10 +853,12 @@
   
               <!-- 二进制/图片配置 -->
               <div v-if="scope.row.ruleType === 'binary'" style="display: flex; flex-direction: column; gap: 10px">
-                <el-select v-model="scope.row.config.mode" size="small" style="width: 150px">
-                  <el-option label="生成图片" value="generate" />
-                  <el-option label="从文件夹读取" value="folder" />
-                </el-select>
+                <div style="display: flex; gap: 8px; align-items: center">
+                  <el-select v-model="scope.row.config.mode" size="small" style="width: 150px">
+                    <el-option label="生成图片" value="generate" />
+                    <el-option label="从文件夹读取" value="folder" />
+                  </el-select>
+                </div>
                 
                 <!-- 生成图片模式 -->
                 <template v-if="scope.row.config.mode === 'generate'">
@@ -460,12 +906,33 @@
   
               <!-- 外键引用配置 -->
               <div v-if="scope.row.ruleType === 'foreign'" style="display: flex; flex-direction: column; gap: 10px">
-                <el-input 
-                  v-model="scope.row.config.foreignTable" 
-                  placeholder="外键关联表名"
-                  size="small"
-                />
+                <div style="display: flex; gap: 8px; align-items: center">
+                  <el-input 
+                    v-model="scope.row.config.foreignTable" 
+                    placeholder="外键关联表名"
+                    size="small"
+                    style="flex: 1"
+                  />
+                </div>
                 <el-checkbox v-model="scope.row.config.randomSelect" size="small">随机选择</el-checkbox>
+              </div>
+              
+              <!-- 示例值显示（所有规则类型通用） -->
+              <div v-if="scope.row.ruleType && scope.row.ruleType !== 'null'" style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e4e7ed;">
+                <div style="display: flex; align-items: center; gap: 8px; padding: 6px 8px; background: #f5f7fa; border-radius: 4px; font-size: 12px;">
+                  <span style="color: #909399; font-weight: 500;">示例值:</span>
+                  <span style="color: #606266; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                    {{ fieldExamples.get(scope.row.fieldName) || '-' }}
+                  </span>
+                  <el-button
+                    :icon="Refresh"
+                    size="small"
+                    text
+                    :loading="fieldExampleLoading.get(scope.row.fieldName)"
+                    @click="() => generateFieldExample(scope.row)"
+                    style="padding: 0; min-height: auto; flex-shrink: 0;"
+                  />
+                </div>
               </div>
             </template>
           </el-table-column>
@@ -795,7 +1262,7 @@
   </template>
   
   <script setup>
-  import { ref, onMounted, computed } from 'vue'
+  import { ref, onMounted, computed, watch } from 'vue'
   import { useRoute, useRouter } from 'vue-router'
   import { ElMessage } from 'element-plus'
   import { Search, WarningFilled, InfoFilled, Refresh } from '@element-plus/icons-vue'
@@ -863,6 +1330,56 @@
     threadCount: 4
   })
   
+  // 获取缓存 key
+  const getCacheKey = () => {
+    return `task_config_${connectionId.value}_${database.value}_${tableName.value}`
+  }
+  
+  // 保存配置到缓存
+  const saveConfigToCache = () => {
+    try {
+      const cacheData = {
+        fieldRules: fieldRules.value,
+        taskConfig: taskConfig.value,
+        timestamp: Date.now()
+      }
+      localStorage.setItem(getCacheKey(), JSON.stringify(cacheData))
+    } catch (error) {
+      console.error('保存配置到缓存失败:', error)
+    }
+  }
+  
+  // 从缓存恢复配置
+  const loadConfigFromCache = () => {
+    try {
+      const cacheKey = getCacheKey()
+      const cached = localStorage.getItem(cacheKey)
+      if (cached) {
+        const cacheData = JSON.parse(cached)
+        // 检查缓存是否过期（24小时）
+        const cacheAge = Date.now() - (cacheData.timestamp || 0)
+        if (cacheAge < 24 * 60 * 60 * 1000) {
+          return cacheData
+        } else {
+          // 缓存过期，清除
+          localStorage.removeItem(cacheKey)
+        }
+      }
+    } catch (error) {
+      console.error('从缓存恢复配置失败:', error)
+    }
+    return null
+  }
+  
+  // 清除缓存
+  const clearCache = () => {
+    try {
+      localStorage.removeItem(getCacheKey())
+    } catch (error) {
+      console.error('清除缓存失败:', error)
+    }
+  }
+  
   onMounted(async () => {
     if (!tableName.value) {
       ElMessage.error('表名不能为空')
@@ -872,11 +1389,20 @@
   
     await loadTableSchema()
     await loadTemplates()
+    
     // 延迟生成示例值，等待字段规则初始化完成
     setTimeout(() => {
       generateAllFieldExamples()
     }, 500)
   })
+  
+  // 监听配置变化，自动保存到缓存（在 setup 阶段注册）
+  watch([fieldRules, taskConfig], () => {
+    // 只有在字段规则已初始化后才保存（避免初始化时保存空数据）
+    if (fieldRules.value && fieldRules.value.length > 0) {
+      saveConfigToCache()
+    }
+  }, { deep: true })
   
   const loadTableSchema = async () => {
     try {
@@ -898,26 +1424,95 @@
         return
       }
       
-      fieldRules.value = response.fields.map(field => ({
-        fieldName: field.name || field.Name,
-        fieldType: field.type || field.Type,
-        goType: (field.go_type || field.GoType || '').toLowerCase(),
-        ruleType: getDefaultRuleType(field),
-        config: getDefaultConfig(field),
-        isPrimaryKey: field.is_primary_key || field.IsPrimaryKey || false,
-        isForeignKey: field.is_foreign_key || field.IsForeignKey || false,
-        isUnique: field.is_unique || field.IsUnique || false,
-        isNullable: field.is_nullable !== false && field.IsNullable !== false,
-        defaultValue: field.default_value || field.DefaultValue,
-        maxLength: field.max_length || field.MaxLength || 0,
-        precision: field.precision || field.Precision || 0,
-        scale: field.scale || field.Scale || 0
-      }))
+      // 先尝试从缓存恢复配置
+      const cachedData = loadConfigFromCache()
+      if (cachedData && cachedData.fieldRules && cachedData.fieldRules.length > 0) {
+        // 获取当前表结构的字段名
+        const currentFieldNames = response.fields.map(f => f.name || f.Name).sort()
+        const cachedFieldNames = cachedData.fieldRules.map(f => f.fieldName).sort()
+        
+        // 检查字段名是否完全匹配
+        if (currentFieldNames.length === cachedFieldNames.length && 
+            currentFieldNames.every((name, index) => name === cachedFieldNames[index])) {
+          // 字段匹配，使用缓存的配置，但需要确保字段元数据是最新的
+          const fieldMap = new Map()
+          response.fields.forEach(field => {
+            fieldMap.set(field.name || field.Name, field)
+          })
+          
+          // 合并缓存的配置和最新的字段元数据
+          fieldRules.value = cachedData.fieldRules.map(cachedRule => {
+            const field = fieldMap.get(cachedRule.fieldName)
+            if (!field) return cachedRule
+            
+            // 保留缓存的规则类型和配置，但更新字段元数据
+            return {
+              ...cachedRule,
+              fieldType: field.type || field.Type,
+              goType: (field.go_type || field.GoType || '').toLowerCase(),
+              isPrimaryKey: field.is_primary_key || field.IsPrimaryKey || false,
+              isForeignKey: field.is_foreign_key || field.IsForeignKey || false,
+              isUnique: field.is_unique || field.IsUnique || false,
+              isNullable: field.is_nullable !== false && field.IsNullable !== false,
+              defaultValue: field.default_value || field.DefaultValue,
+              maxLength: field.max_length || field.MaxLength || 0,
+              precision: field.precision || field.Precision || 0,
+              scale: field.scale || field.Scale || 0
+            }
+          })
+          
+          // 恢复任务配置
+          if (cachedData.taskConfig) {
+            taskConfig.value = { ...taskConfig.value, ...cachedData.taskConfig }
+          }
+          
+          ElMessage.info('已恢复上次的配置')
+          console.log('从缓存恢复的字段规则:', fieldRules.value)
+          return
+        } else {
+          // 字段不匹配，清除缓存
+          clearCache()
+        }
+      }
+      
+      // 没有缓存或缓存不匹配，使用默认配置初始化
+      fieldRules.value = response.fields.map(field => {
+        const defaultRuleType = getDefaultRuleType(field)
+        // 创建一个包含 ruleType 的临时对象，以便 getDefaultConfig 能正确获取规则类型
+        const fieldWithRuleType = {
+          ...field,
+          ruleType: defaultRuleType,
+          go_type: field.go_type || field.GoType,
+          GoType: field.go_type || field.GoType,
+          fieldType: field.type || field.Type
+        }
+        return {
+          fieldName: field.name || field.Name,
+          fieldType: field.type || field.Type,
+          goType: (field.go_type || field.GoType || '').toLowerCase(),
+          ruleType: defaultRuleType,
+          config: getDefaultConfig(fieldWithRuleType),
+          isPrimaryKey: field.is_primary_key || field.IsPrimaryKey || false,
+          isForeignKey: field.is_foreign_key || field.IsForeignKey || false,
+          isUnique: field.is_unique || field.IsUnique || false,
+          isNullable: field.is_nullable !== false && field.IsNullable !== false,
+          defaultValue: field.default_value || field.DefaultValue,
+          maxLength: field.max_length || field.MaxLength || 0,
+          precision: field.precision || field.Precision || 0,
+          scale: field.scale || field.Scale || 0
+        }
+      })
       
       console.log('初始化后的字段规则:', fieldRules.value)
     } catch (error) {
       console.error('加载表结构失败:', error)
-      ElMessage.error('加载表结构失败: ' + (error.formattedMessage || error.message))
+      const errorMsg = error.formattedMessage || error.message || ''
+      // 如果是连接失败的错误，提供更友好的提示
+      if (errorMsg.includes('连接失败') || errorMsg.includes('连接未建立') || errorMsg.includes('请先连接')) {
+        ElMessage.warning('数据库连接失败，系统已尝试自动重连。如果问题持续，请检查连接配置')
+      } else {
+        ElMessage.error('加载表结构失败: ' + errorMsg)
+      }
     }
   }
   
@@ -977,23 +1572,101 @@
     const type = (field.go_type || field.GoType || '').toLowerCase()
     
     if (type.includes('int')) {
-      return { min: 1, max: 1000000, isInt: true }
+      return { 
+        min: 1, 
+        max: 1000000, 
+        isInt: true,
+        step: 0,
+        precision: 0,
+        scale: 0,
+        fixedLength: 0,
+        distribution: 'uniform',
+        mean: 0,
+        stdDev: 0,
+        lambda: 0
+      }
     } else if (type.includes('float') || type.includes('decimal')) {
-      return { min: 0, max: 10000, isInt: false }
+      return { 
+        min: 0, 
+        max: 10000, 
+        isInt: false,
+        step: 0,
+        precision: 0,
+        scale: 0,
+        fixedLength: 0,
+        distribution: 'uniform',
+        mean: 0,
+        stdDev: 0,
+        lambda: 0
+      }
     } else if (type.includes('time') || type.includes('date')) {
-      return { startDate: '', endDate: '', format: '' }
+      return { 
+        startDate: '', 
+        endDate: '', 
+        format: '',
+        yearRange: [],
+        yearList: [],
+        monthRange: [],
+        monthList: [],
+        dayRange: [],
+        dayList: [],
+        hourRange: [],
+        hourList: [],
+        minuteRange: [],
+        minuteList: [],
+        secondRange: [],
+        secondList: [],
+        weekdayList: [],
+        onlyWeekdays: false,
+        onlyWeekends: false
+      }
     } else if (type === 'bool') {
       return { values: [true, false], valuesText: 'true,false' }
     } else {
-      return { minLength: 5, maxLength: 20, charSet: 'all' }
+      return { 
+        minLength: 5, 
+        maxLength: 20, 
+        charSet: 'all',
+        fixedLength: 0,
+        case: 'mixed',
+        numberPosition: 'none',
+        prefix: '',
+        suffix: '',
+        customChars: ''
+      }
     }
   }
   
   const onRuleTypeChange = (field) => {
     // 切换规则类型时重置配置
     field.config = getDefaultConfig(field)
+    // 确保数组字段已初始化（防止访问 undefined）
+    if (field.config && field.ruleType === 'random_date') {
+      if (!field.config.yearRange || !Array.isArray(field.config.yearRange)) field.config.yearRange = []
+      if (!field.config.monthRange || !Array.isArray(field.config.monthRange)) field.config.monthRange = []
+      if (!field.config.dayRange || !Array.isArray(field.config.dayRange)) field.config.dayRange = []
+      if (!field.config.hourRange || !Array.isArray(field.config.hourRange)) field.config.hourRange = []
+      if (!field.config.minuteRange || !Array.isArray(field.config.minuteRange)) field.config.minuteRange = []
+      if (!field.config.secondRange || !Array.isArray(field.config.secondRange)) field.config.secondRange = []
+      if (!field.config.yearList || !Array.isArray(field.config.yearList)) field.config.yearList = []
+      if (!field.config.monthList || !Array.isArray(field.config.monthList)) field.config.monthList = []
+      if (!field.config.dayList || !Array.isArray(field.config.dayList)) field.config.dayList = []
+      if (!field.config.hourList || !Array.isArray(field.config.hourList)) field.config.hourList = []
+      if (!field.config.minuteList || !Array.isArray(field.config.minuteList)) field.config.minuteList = []
+      if (!field.config.secondList || !Array.isArray(field.config.secondList)) field.config.secondList = []
+      if (!field.config.weekdayList || !Array.isArray(field.config.weekdayList)) field.config.weekdayList = []
+      // 确保范围数组至少有2个元素
+      if (field.config.yearRange.length < 2) field.config.yearRange = [1900, 2100]
+      if (field.config.monthRange.length < 2) field.config.monthRange = [1, 12]
+      if (field.config.dayRange.length < 2) field.config.dayRange = [1, 31]
+      if (field.config.hourRange.length < 2) field.config.hourRange = [0, 23]
+      if (field.config.minuteRange.length < 2) field.config.minuteRange = [0, 59]
+      if (field.config.secondRange.length < 2) field.config.secondRange = [0, 59]
+    }
     // 验证配置
     validateFieldRule(field)
+    // 重新生成示例值
+    generateFieldExample(field)
   }
   
   // 验证字段规则配置是否符合字段边界要求
@@ -1495,6 +2168,8 @@
       
       await api.createTask(taskName, connectionId.value, config)
       ElMessage.success('任务创建成功')
+      // 清除缓存
+      clearCache()
       router.push('/tasks')
     } catch (error) {
       ElMessage.error('创建任务失败: ' + (error.formattedMessage || error.message))
@@ -1553,13 +2228,18 @@
             rule.config = {
               start_value: field.config.startValue || 1,
               step: field.config.step || 1,
-              cycle: field.config.cycle || false
+              cycle: field.config.cycle || false,
+              max_value: field.config.maxValue || 0,
+              format: field.config.format || '',
+              precision: field.config.precision || 0,
+              scale: field.config.scale || 0
             }
             break
           case 'list':
             rule.config = {
               values: field.config.values || [],
-              allow_repeat: true
+              allow_repeat: field.config.allowRepeat !== undefined ? field.config.allowRepeat : true,
+              weights: field.config.weights || []
             }
             break
           case 'regex':
@@ -1797,13 +2477,18 @@
             rule.config = {
               start_value: field.config.startValue || 1,
               step: field.config.step || 1,
-              cycle: field.config.cycle || false
+              cycle: field.config.cycle || false,
+              max_value: field.config.maxValue || 0,
+              format: field.config.format || '',
+              precision: field.config.precision || 0,
+              scale: field.config.scale || 0
             }
             break
           case 'list':
             rule.config = {
               values: field.config.values || [],
-              allow_repeat: true
+              allow_repeat: field.config.allowRepeat !== undefined ? field.config.allowRepeat : true,
+              weights: field.config.weights || []
             }
             break
           case 'regex':
@@ -1960,13 +2645,20 @@
             fieldRule.config = {
               startValue: ruleConfig.start_value || 1,
               step: ruleConfig.step || 1,
-              cycle: ruleConfig.cycle || false
+              cycle: ruleConfig.cycle || false,
+              maxValue: ruleConfig.max_value || 0,
+              format: ruleConfig.format || '',
+              precision: ruleConfig.precision || 0,
+              scale: ruleConfig.scale || 0
             }
             break
           case 'list':
             fieldRule.config = {
               values: ruleConfig.values || [],
-              valuesText: (ruleConfig.values || []).join(',')
+              valuesText: (ruleConfig.values || []).join(','),
+              allowRepeat: ruleConfig.allow_repeat !== undefined ? ruleConfig.allow_repeat : true,
+              weights: ruleConfig.weights || [],
+              weightsText: (ruleConfig.weights || []).join(',')
             }
             break
           case 'regex':
@@ -2114,12 +2806,20 @@
             fieldRule.config = {
               startValue: ruleConfig.start_value || 1,
               step: ruleConfig.step || 1,
-              cycle: ruleConfig.cycle || false
+              cycle: ruleConfig.cycle || false,
+              maxValue: ruleConfig.max_value || 0,
+              format: ruleConfig.format || '',
+              precision: ruleConfig.precision || 0,
+              scale: ruleConfig.scale || 0
             }
             break
           case 'list':
             fieldRule.config = {
-              values: ruleConfig.values || []
+              values: ruleConfig.values || [],
+              valuesText: (ruleConfig.values || []).join(','),
+              allowRepeat: ruleConfig.allow_repeat !== undefined ? ruleConfig.allow_repeat : true,
+              weights: ruleConfig.weights || [],
+              weightsText: (ruleConfig.weights || []).join(',')
             }
             break
           case 'regex':
@@ -2560,11 +3260,26 @@
               field.config.startValue = config.startValue || 1
               field.config.step = config.step || 1
               field.config.cycle = config.cycle || false
+              field.config.maxValue = config.maxValue || 0
+              field.config.format = config.format || ''
+              field.config.precision = config.precision || 0
+              field.config.scale = config.scale || 0
               break
             case 'list':
               if (config.valuesText) {
                 field.config.values = config.valuesText.split(',').map(v => v.trim()).filter(v => v)
                 field.config.valuesText = config.valuesText
+              }
+              field.config.allowRepeat = config.allowRepeat !== undefined ? config.allowRepeat : true
+              if (config.weightsText) {
+                field.config.weights = config.weightsText.split(',').map(v => {
+                  const num = parseFloat(v.trim())
+                  return isNaN(num) ? 1.0 : num
+                }).filter(v => v > 0)
+                field.config.weightsText = config.weightsText
+              } else {
+                field.config.weights = []
+                field.config.weightsText = ''
               }
               break
             case 'regex':

@@ -25,31 +25,33 @@
               </el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="250" fixed="right">
+          <el-table-column label="操作" width="180" fixed="right">
             <template #default="scope">
-              <el-button
-                v-if="scope.row.enabled"
-                type="warning"
-                size="small"
-                @click="disableSchedule(scope.row.task_id)"
-              >
-                禁用
-              </el-button>
-              <el-button
-                v-else
-                type="success"
-                size="small"
-                @click="enableSchedule(scope.row.task_id)"
-              >
-                启用
-              </el-button>
-              <el-button
-                type="danger"
-                size="small"
-                @click="removeSchedule(scope.row.task_id)"
-              >
-                删除
-              </el-button>
+              <div style="display: flex; gap: 4px;">
+                <el-button
+                  v-if="scope.row.enabled"
+                  type="warning"
+                  size="small"
+                  @click="disableSchedule(scope.row.task_id)"
+                >
+                  禁用
+                </el-button>
+                <el-button
+                  v-else
+                  type="success"
+                  size="small"
+                  @click="enableSchedule(scope.row.task_id)"
+                >
+                  启用
+                </el-button>
+                <el-button
+                  type="danger"
+                  size="small"
+                  @click="removeSchedule(scope.row.task_id)"
+                >
+                  删除
+                </el-button>
+              </div>
             </template>
           </el-table-column>
         </el-table>

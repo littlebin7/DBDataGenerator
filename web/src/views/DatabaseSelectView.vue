@@ -96,8 +96,56 @@
 
       <!-- 右侧详情面板 -->
       <div class="detail-panel">
+        <!-- 选中连接时的显示 -->
+        <div v-if="selectedConnection" class="selected-info">
+          <h3 class="panel-title">连接信息</h3>
+          <el-descriptions :column="1" border size="small" class="info-descriptions" label-width="100px">
+            <el-descriptions-item label="连接名称">
+              <el-tag type="primary" size="small">{{ selectedConnection.name }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="数据库类型">
+              <el-tag :type="selectedConnection.connected ? 'success' : 'warning'" size="small">
+                {{ selectedConnection.type.toUpperCase() }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="连接状态">
+              <el-tag :type="selectedConnection.connected ? 'success' : 'warning'" size="small">
+                {{ selectedConnection.connected ? '已连接' : '未连接' }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="主机地址">
+              <span style="color: #606266;">{{ selectedConnection.host }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="端口">
+              <span style="color: #606266;">{{ selectedConnection.port }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="用户名">
+              <span style="color: #606266;">{{ selectedConnection.user }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="默认数据库" v-if="selectedConnection.database !== '-'">
+              <el-tag type="info" size="small">{{ selectedConnection.database }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item :label="selectedConnection.type === 'dameng' || selectedConnection.type === 'oracle' ? 'Schema数量' : '数据库数量'">
+              <el-tag type="success" size="small">{{ selectedConnection.databaseCount }} 个</el-tag>
+            </el-descriptions-item>
+          </el-descriptions>
+          
+          <div class="action-buttons">
+            <el-button 
+              type="primary" 
+              style="width: 100%"
+              @click="refreshConnection"
+              :icon="Refresh"
+              :loading="actionLoading.get('refreshConnection')"
+              :disabled="actionLoading.get('refreshConnection')"
+            >
+              刷新连接
+            </el-button>
+          </div>
+        </div>
+        
         <!-- 选中表时的显示 -->
-        <div v-if="selectedTable" class="selected-info">
+        <div v-else-if="selectedTable" class="selected-info">
           <h3 class="panel-title">已选择的表</h3>
           <el-descriptions :column="1" border size="small" class="info-descriptions" label-width="100px">
             <el-descriptions-item label="连接名称">
@@ -119,6 +167,9 @@
             </el-descriptions-item>
             <el-descriptions-item label="表注释">
               <span style="color: #606266;">{{ tableSchema && tableSchema.table_comment ? tableSchema.table_comment : '-' }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="表空间" v-if="tableSchema && (tableSchema.tablespace || tableSchema.Tablespace)">
+              <el-tag type="info" size="small">{{ tableSchema.tablespace || tableSchema.Tablespace }}</el-tag>
             </el-descriptions-item>
           </el-descriptions>
           
@@ -145,7 +196,7 @@
         </div>
         
         <!-- 选中数据库时的显示 -->
-        <div v-else-if="selectedDatabase" class="selected-info">
+        <div v-else-if="selectedDatabase && !selectedConnection" class="selected-info">
           <h3 class="panel-title">数据库信息</h3>
           <el-descriptions :column="1" border size="small" class="info-descriptions" label-width="100px">
             <el-descriptions-item label="连接名称">
@@ -270,6 +321,8 @@ const loadedData = ref(new Map())
 const selectedTable = ref(null)
 // 选中的数据库信息
 const selectedDatabase = ref(null)
+// 选中的连接信息
+const selectedConnection = ref(null)
 
 // 对话框
 const showSchemaDialog = ref(false)
@@ -410,6 +463,12 @@ const loadNode = async (node, resolve) => {
       data.children = databaseNodes
       data.loaded = true
       
+      // 如果当前选中的连接是这个节点，更新数据库数量
+      if (selectedConnection.value && 
+          selectedConnection.value.id === data.connectionId) {
+        selectedConnection.value.databaseCount = databaseNodes.length
+      }
+      
       resolve(databaseNodes)
     } catch (error) {
       ElMessage.error('加载数据库列表失败: ' + (error.formattedMessage || error.message))
@@ -474,7 +533,11 @@ const loadNode = async (node, resolve) => {
       
       resolve(tableNodes)
     } catch (error) {
-      ElMessage.error('加载表列表失败: ' + (error.formattedMessage || error.message))
+      const errorMsg = error.formattedMessage || error.message || ''
+      // 如果是连接失败的错误，静默处理（系统会自动重连）
+      if (!errorMsg.includes('连接失败') && !errorMsg.includes('连接未建立') && !errorMsg.includes('请先连接')) {
+        ElMessage.warning('加载表列表失败: ' + errorMsg)
+      }
       resolve([])
     }
   } else {
@@ -506,6 +569,7 @@ const handleNodeClick = async (data, node) => {
       table: data.table
     }
     selectedDatabase.value = null
+    selectedConnection.value = null
     tableRowCount.value = null
     tableSchema.value = null // 清空之前的表结构
     
@@ -521,6 +585,7 @@ const handleNodeClick = async (data, node) => {
       tableCount: data.tableCount
     }
     selectedTable.value = null
+    selectedConnection.value = null
     
     // 如果节点未展开，展开节点（这会触发 loadNode 加载表数据）
     if (!node.expanded) {
@@ -529,6 +594,50 @@ const handleNodeClick = async (data, node) => {
   } else if (data.type === 'connection') {
     selectedTable.value = null
     selectedDatabase.value = null
+    
+    // 设置选中的连接信息
+    const connection = connectionStore.allConnections.find(c => c.id === data.connectionId)
+    if (connection) {
+      // 获取数据库数量（从已加载的children或重新获取）
+      let databaseCount = 0
+      if (data.loaded && data.children) {
+        databaseCount = data.children.length
+      } else {
+        // 如果未加载，尝试获取数据库数量
+        try {
+          const databasesRes = await api.getDatabases(data.connectionId)
+          const databases = databasesRes.databases || []
+          databaseCount = databases.length
+        } catch (error) {
+          console.error('获取数据库数量失败:', error)
+        }
+      }
+      
+      selectedConnection.value = {
+        id: connection.id,
+        name: connection.name,
+        type: connection.config?.type || data.config?.type || 'unknown',
+        host: connection.config?.host || '-',
+        port: connection.config?.port || '-',
+        user: connection.config?.user || '-',
+        database: connection.config?.database || '-',
+        connected: connection.connected || false,
+        databaseCount: databaseCount
+      }
+    } else {
+      // 如果找不到连接信息，使用节点数据
+      selectedConnection.value = {
+        id: data.connectionId,
+        name: data.connectionName,
+        type: data.config?.type || 'unknown',
+        host: data.config?.host || '-',
+        port: data.config?.port || '-',
+        user: data.config?.user || '-',
+        database: data.config?.database || '-',
+        connected: data.connected || false,
+        databaseCount: data.loaded && data.children ? data.children.length : 0
+      }
+    }
     
     // 如果连接节点未加载，则展开并加载数据库
     if (!data.loaded) {
@@ -540,6 +649,10 @@ const handleNodeClick = async (data, node) => {
         await loadNode(node, (children) => {
           data.children = children
           data.loaded = true
+          // 更新数据库数量
+          if (selectedConnection.value) {
+            selectedConnection.value.databaseCount = children.length
+          }
         })
       }
     } else if (!node.expanded) {
@@ -549,6 +662,7 @@ const handleNodeClick = async (data, node) => {
   } else {
     selectedTable.value = null
     selectedDatabase.value = null
+    selectedConnection.value = null
   }
 }
 
@@ -577,6 +691,7 @@ const loadTableSchema = async (database, table, connectionId) => {
         schema = {
           table_name: schema.TableName || schema.table_name,
           table_comment: schema.TableComment || schema.table_comment || '',
+          tablespace: schema.Tablespace || schema.tablespace || '',
           fields: schema.Fields.map(field => ({
             name: field.Name || field.name,
             type: field.Type || field.type,
@@ -602,9 +717,19 @@ const loadTableSchema = async (database, table, connectionId) => {
       schema.table_comment = schema.TableComment || ''
     }
     
+    // 确保表空间字段存在
+    if (schema && !schema.tablespace) {
+      schema.tablespace = schema.Tablespace || ''
+    }
+    
     tableSchema.value = schema
   } catch (error) {
     console.error('获取表结构失败:', error)
+    const errorMsg = error.formattedMessage || error.message || ''
+    // 如果是连接未建立的错误，静默处理（不显示错误提示）
+    if (!errorMsg.includes('连接未建立') && !errorMsg.includes('请先连接')) {
+      ElMessage.warning('获取表结构失败: ' + errorMsg)
+    }
     tableSchema.value = null
   }
 }
@@ -634,6 +759,7 @@ const viewSchema = async () => {
         schema = {
           table_name: schema.TableName || schema.table_name,
           table_comment: schema.TableComment || schema.table_comment || '',
+          tablespace: schema.Tablespace || schema.tablespace || '',
           fields: schema.Fields.map(field => ({
             name: field.Name || field.name,
             type: field.Type || field.type,
@@ -667,7 +793,13 @@ const viewSchema = async () => {
     showSchemaDialog.value = true
   } catch (error) {
     console.error('获取表结构失败:', error)
-    ElMessage.error('获取表结构失败: ' + (error.formattedMessage || error.message))
+    const errorMsg = error.formattedMessage || error.message || ''
+    // 如果是连接失败的错误，提供更友好的提示
+    if (errorMsg.includes('连接失败') || errorMsg.includes('连接未建立') || errorMsg.includes('请先连接')) {
+      ElMessage.warning('数据库连接失败，系统已尝试自动重连。如果问题持续，请检查连接配置')
+    } else {
+      ElMessage.error('获取表结构失败: ' + errorMsg)
+    }
   } finally {
     actionLoading.value.set('viewSchema', false)
   }
@@ -733,6 +865,125 @@ const refreshAll = async () => {
     ElMessage.success('刷新成功')
   } finally {
     actionLoading.value.set('refreshAll', false)
+  }
+}
+
+// 刷新连接
+const refreshConnection = async () => {
+  if (!selectedConnection.value) return
+  if (actionLoading.value.get('refreshConnection')) return
+  
+  actionLoading.value.set('refreshConnection', true)
+  try {
+    // 检查刷新频率限制
+    const now = Date.now()
+    const timeSinceLastRefresh = now - lastRefreshTime.value
+    if (timeSinceLastRefresh < REFRESH_INTERVAL) {
+      const remainingTime = Math.ceil((REFRESH_INTERVAL - timeSinceLastRefresh) / 1000)
+      ElMessage.warning(`刷新过于频繁，请等待 ${remainingTime} 秒后再试`)
+      return
+    }
+    
+    // 更新最后刷新时间
+    lastRefreshTime.value = now
+    const { id } = selectedConnection.value
+    
+    // 如果未连接，尝试连接
+    if (!selectedConnection.value.connected) {
+      try {
+        await api.reconnect(id)
+        await connectionStore.loadConnections()
+        const updatedConn = connectionStore.allConnections.find(c => c.id === id)
+        if (updatedConn) {
+          selectedConnection.value.connected = updatedConn.connected || false
+        }
+      } catch (error) {
+        ElMessage.error('连接失败: ' + (error.formattedMessage || error.message))
+        return
+      }
+    }
+    
+    // 重新获取数据库列表
+    try {
+      const databasesRes = await api.getDatabases(id)
+      const databases = databasesRes.databases || []
+      selectedConnection.value.databaseCount = databases.length
+      
+      // 找到对应的树节点并更新
+      const findAndUpdateNode = (nodes, connectionId) => {
+        for (const node of nodes) {
+          if (node.type === 'connection' && node.connectionId === connectionId) {
+            // 重置加载状态，强制重新加载
+            node.loaded = false
+            node.children = []
+            
+            // 找到树组件中对应的节点
+            const nodeId = `conn-${connectionId}`
+            const treeNode = treeRef.value?.store?.nodesMap[nodeId]
+            
+            // 如果树节点存在，清空其子节点
+            if (treeNode) {
+              treeNode.childNodes = []
+              treeNode.data.children = []
+            }
+            
+            // 重新加载数据库
+            const reloadDatabases = async () => {
+              try {
+                const databaseNodes = databases.map(db => {
+                  const dbName = typeof db === 'string' ? db : (db.name || db)
+                  const dbUsername = typeof db === 'object' && db.username ? db.username : null
+                  
+                  return {
+                    id: `db-${connectionId}-${dbName}`,
+                    label: dbName,
+                    type: 'database',
+                    connectionId: connectionId,
+                    connectionName: node.connectionName,
+                    database: dbName,
+                    username: dbUsername,
+                    children: [],
+                    isLeaf: false,
+                    loaded: false
+                  }
+                })
+                
+                node.children = databaseNodes
+                node.loaded = true
+                
+                // 如果树节点存在且已展开，需要更新树组件
+                if (treeNode && treeNode.expanded) {
+                  treeNode.expand()
+                }
+                
+                ElMessage.success('刷新成功')
+              } catch (error) {
+                ElMessage.error('刷新失败: ' + (error.formattedMessage || error.message))
+              }
+            }
+            
+            reloadDatabases()
+            return true
+          }
+          if (node.children && node.children.length > 0) {
+            if (findAndUpdateNode(node.children, connectionId)) {
+              return true
+            }
+          }
+        }
+        return false
+      }
+      
+      if (!findAndUpdateNode(treeData.value, id)) {
+        ElMessage.warning('未找到对应的连接节点')
+      }
+    } catch (error) {
+      ElMessage.error('获取数据库列表失败: ' + (error.formattedMessage || error.message))
+    }
+  } catch (error) {
+    ElMessage.error('刷新失败: ' + (error.formattedMessage || error.message))
+  } finally {
+    actionLoading.value.set('refreshConnection', false)
   }
 }
 

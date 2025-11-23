@@ -44,42 +44,52 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="300">
+        <el-table-column label="操作" width="340">
           <template #default="scope">
-            <el-button 
-              v-if="!scope.row.connected"
-              size="small" 
-              type="success"
-              @click="reconnect(scope.row.id)"
-            >
-              连接
-            </el-button>
-            <el-button 
-              v-if="!scope.row.is_active && scope.row.connected" 
-              size="small" 
-              @click="switchConnection(scope.row.id)"
-            >
-              设为活动
-            </el-button>
-            <el-button 
-              size="small" 
-              @click="editConnection(scope.row)"
-            >
-              编辑
-            </el-button>
-            <el-button 
-              size="small" 
-              @click="testConnection(scope.row)"
-            >
-              测试
-            </el-button>
-            <el-button 
-              size="small" 
-              type="danger" 
-              @click="removeConnection(scope.row.id)"
-            >
-              删除
-            </el-button>
+            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+              <el-button 
+                v-if="!scope.row.connected"
+                size="small" 
+                type="success"
+                @click="reconnect(scope.row.id)"
+              >
+                连接
+              </el-button>
+              <el-button 
+                v-if="scope.row.connected"
+                size="small" 
+                type="warning"
+                @click="disconnectConnection(scope.row.id)"
+              >
+                断开
+              </el-button>
+              <el-button 
+                v-if="!scope.row.is_active && scope.row.connected" 
+                size="small" 
+                @click="switchConnection(scope.row.id)"
+              >
+                设为活动
+              </el-button>
+              <el-button 
+                size="small" 
+                @click="editConnection(scope.row)"
+              >
+                编辑
+              </el-button>
+              <el-button 
+                size="small" 
+                @click="testConnection(scope.row)"
+              >
+                测试
+              </el-button>
+              <el-button 
+                size="small" 
+                type="danger" 
+                @click="removeConnection(scope.row.id)"
+              >
+                删除
+              </el-button>
+            </div>
           </template>
         </el-table-column>
         <template #empty>
@@ -695,6 +705,23 @@ const reconnect = async (connId) => {
   } catch (error) {
     console.error('重新连接错误:', error)
     ElMessage.error('连接失败: ' + (error.formattedMessage || error.message))
+  }
+}
+
+const disconnectConnection = async (connId) => {
+  try {
+    await api.disconnect(connId)
+    ElMessage.success('已断开连接')
+    // 刷新连接列表
+    if (connectionStore && typeof connectionStore.loadConnections === 'function') {
+      await connectionStore.loadConnections()
+    }
+    if (connectionStore && typeof connectionStore.loadActiveConnection === 'function') {
+      await connectionStore.loadActiveConnection()
+    }
+  } catch (error) {
+    console.error('断开连接错误:', error)
+    ElMessage.error('断开连接失败: ' + (error.formattedMessage || error.message))
   }
 }
 

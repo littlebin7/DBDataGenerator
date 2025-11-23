@@ -64,6 +64,7 @@ type Database interface {
 type TableSchema struct {
 	TableName    string      `json:"table_name"`
 	TableComment string      `json:"table_comment"` // 表注释
+	Tablespace   string      `json:"tablespace"`    // 表空间（达梦数据库等）
 	Fields       []FieldInfo `json:"fields"`
 }
 

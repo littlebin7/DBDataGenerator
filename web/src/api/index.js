@@ -251,6 +251,11 @@ export default {
     return response.data
   },
 
+  async batchDeleteTaskHistory(historyIds) {
+    const response = await api.post('/tasks/history/batch/delete', { history_ids: historyIds })
+    return response.data
+  },
+
   // 监控相关
   async getSystemMetrics() {
     const response = await api.get('/monitor/metrics')
@@ -374,22 +379,6 @@ export default {
 
   async batchDeleteTasks(taskIds) {
     const response = await api.post('/tasks/batch/delete', { task_ids: taskIds })
-    return response.data
-  },
-
-  // 数据回滚
-  async rollbackTask(taskId) {
-    const response = await api.post(`/task/${taskId}/rollback`)
-    return response.data
-  },
-
-  async rollbackPartial(taskId, options) {
-    const response = await api.post(`/task/${taskId}/rollback/partial`, options)
-    return response.data
-  },
-
-  async getRollbackRecord(taskId) {
-    const response = await api.get(`/task/${taskId}/rollback`)
     return response.data
   },
 

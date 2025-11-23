@@ -185,6 +185,34 @@ func (cm *ConnectionManagerFile) GetAllConnections() []*ConnectionInfo {
 	return connections
 }
 
+// CloseConnection 关闭连接（不断除配置）
+func (cm *ConnectionManagerFile) CloseConnection(connID string) error {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+
+	conn, exists := cm.connections[connID]
+	if !exists {
+		return fmt.Errorf("连接不存在: %s", connID)
+	}
+
+	// 断开连接
+	if conn.Database != nil {
+		conn.Database.Disconnect()
+		conn.Database = nil
+		conn.Connected = false
+	}
+
+	// 如果该连接是活动连接，取消活动状态
+	if conn.IsActive {
+		conn.IsActive = false
+	}
+
+	// 保存配置（更新连接状态）
+	_ = cm.SaveConnections() // 忽略错误，不影响连接关闭
+
+	return nil
+}
+
 // RemoveConnection 移除连接
 func (cm *ConnectionManagerFile) RemoveConnection(connID string) error {
 	cm.mu.Lock()

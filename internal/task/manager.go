@@ -23,6 +23,7 @@ type Manager struct {
 	wsHub          interface{ Broadcast(message interface{}) } // WebSocket Hub接口
 	historyManager *HistoryManager                             // 历史管理器
 	persistence    *TaskPersistence                            // 任务持久化管理器
+	onTaskComplete func(*Task)                                 // 任务完成回调（用于创建回滚记录等）
 }
 
 // taskPushState 任务推送状态（用于去重）
@@ -61,6 +62,13 @@ func (m *Manager) SetPersistence(p *TaskPersistence) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.persistence = p
+}
+
+// SetOnTaskComplete 设置任务完成回调
+func (m *Manager) SetOnTaskComplete(callback func(*Task)) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.onTaskComplete = callback
 }
 
 // SetWebSocketHub 设置WebSocket Hub
@@ -396,6 +404,23 @@ func (m *Manager) StartTask(taskID string) error {
 		return fmt.Errorf("任务已在运行中")
 	}
 
+	// 如果任务已完成，重置状态以便重新执行
+	if task.Status == TaskStatusCompleted {
+		task.mu.Lock()
+		task.Status = TaskStatusPending
+		task.GeneratedRows = 0
+		task.SuccessRows = 0
+		task.FailedRows = 0
+		task.Progress = 0
+		task.Speed = 0
+		task.ETA = 0
+		task.Error = ""
+		task.StartTime = nil
+		task.EndTime = nil
+		task.mu.Unlock()
+		m.saveTaskToDB(task)
+	}
+
 	// 获取任务关联的数据库连接
 	conn, err := m.connMgr.GetConnection(task.ConnectionID)
 	if err != nil {
@@ -442,6 +467,13 @@ func (m *Manager) StartTask(taskID string) error {
 		m.saveTaskToDB(t)
 		m.broadcastTaskUpdate(t)
 		m.saveTaskHistory(t)
+		// 调用外部设置的回调（用于创建回滚记录等）
+		m.mu.RLock()
+		onComplete := m.onTaskComplete
+		m.mu.RUnlock()
+		if onComplete != nil {
+			onComplete(t)
+		}
 	})
 
 	// 启动协程池

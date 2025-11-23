@@ -275,6 +275,28 @@ func (db *DamengDB) GetTableSchema(database, table string) (*TableSchema, error)
 		Fields:    []FieldInfo{},
 	}
 
+	// 获取表空间信息
+	var tablespaceQuery string
+	var tablespace sql.NullString
+	if database == "" {
+		tablespaceQuery = `
+			SELECT TABLESPACE_NAME 
+			FROM USER_TABLES 
+			WHERE TABLE_NAME = ?
+		`
+		err = db.db.QueryRowContext(ctx, tablespaceQuery, tableName).Scan(&tablespace)
+	} else {
+		tablespaceQuery = `
+			SELECT TABLESPACE_NAME 
+			FROM ALL_TABLES 
+			WHERE OWNER = ? AND TABLE_NAME = ?
+		`
+		err = db.db.QueryRowContext(ctx, tablespaceQuery, strings.ToUpper(database), tableName).Scan(&tablespace)
+	}
+	if err == nil && tablespace.Valid {
+		schema.Tablespace = tablespace.String
+	}
+
 	// 获取表注释
 	var tableCommentQuery string
 	var tableComment sql.NullString
@@ -507,15 +529,28 @@ func (db *DamengDB) BatchInsert(database, table string, rows []map[string]interf
 	placeholders := strings.Repeat("?,", len(fields))
 	placeholders = placeholders[:len(placeholders)-1]
 
+	// 构建表名（如果指定了模式名，使用 模式名.表名 格式）
+	tableName := table
+	if database != "" {
+		tableName = fmt.Sprintf("%s.%s", strings.ToUpper(database), table)
+	}
+
 	query := fmt.Sprintf(
 		"INSERT INTO %s (%s) VALUES (%s)",
-		table,
+		tableName,
 		strings.Join(fields, ","),
 		placeholders,
 	)
 
+	// 开始事务
+	tx, err := db.db.Begin()
+	if err != nil {
+		return fmt.Errorf("开始事务失败: %w", err)
+	}
+	defer tx.Rollback()
+
 	// 准备语句
-	stmt, err := db.db.Prepare(query)
+	stmt, err := tx.Prepare(query)
 	if err != nil {
 		return fmt.Errorf("准备语句失败: %w", err)
 	}
@@ -533,11 +568,21 @@ func (db *DamengDB) BatchInsert(database, table string, rows []map[string]interf
 		}
 	}
 
+	// 提交事务
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("提交事务失败: %w", err)
+	}
+
 	return nil
 }
 
 func (db *DamengDB) QueryTableData(database, table string, limit, offset int) ([]map[string]interface{}, error) {
-	query := fmt.Sprintf("SELECT * FROM %s LIMIT ? OFFSET ?", table)
+	// 构建表名（如果指定了模式名，使用 模式名.表名 格式）
+	tableName := table
+	if database != "" {
+		tableName = fmt.Sprintf("%s.%s", strings.ToUpper(database), table)
+	}
+	query := fmt.Sprintf("SELECT * FROM %s LIMIT ? OFFSET ?", tableName)
 	rows, err := db.db.Query(query, limit, offset)
 	if err != nil {
 		return nil, fmt.Errorf("查询数据失败: %w", err)
@@ -597,7 +642,7 @@ func (db *DamengDB) GetTableCount(database, table string) (int64, error) {
 		if database == "" {
 			query = fmt.Sprintf("SELECT COUNT(*) FROM %s", table)
 		} else {
-			query = fmt.Sprintf("SELECT COUNT(*) FROM %s.%s", database, table)
+			query = fmt.Sprintf("SELECT COUNT(*) FROM %s.%s", strings.ToUpper(database), table)
 		}
 
 		var count int64
@@ -656,7 +701,12 @@ func (db *DamengDB) ExecuteNonQuery(database, query string, args ...interface{})
 }
 
 func (db *DamengDB) GetForeignTableData(database, table, field string, limit int) ([]interface{}, error) {
-	query := fmt.Sprintf("SELECT %s FROM %s LIMIT ?", field, table)
+	// 构建表名（如果指定了模式名，使用 模式名.表名 格式）
+	tableName := table
+	if database != "" {
+		tableName = fmt.Sprintf("%s.%s", strings.ToUpper(database), table)
+	}
+	query := fmt.Sprintf("SELECT %s FROM %s LIMIT ?", field, tableName)
 	rows, err := db.db.Query(query, limit)
 	if err != nil {
 		return nil, err

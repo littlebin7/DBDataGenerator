@@ -183,10 +183,10 @@ func (h *Handler) UpdateConnection(c *gin.Context) {
 	h.sendSuccess(c, nil, "连接配置已更新")
 }
 
-// Disconnect 断开连接
+// Disconnect 断开连接（不断除配置）
 func (h *Handler) Disconnect(c *gin.Context) {
 	connID := c.Param("id")
-	if err := h.connMgr.RemoveConnection(connID); err != nil {
+	if err := h.connMgr.CloseConnection(connID); err != nil {
 		h.logger.Warn("断开连接失败", zap.Error(err), zap.String("conn_id", connID))
 		h.sendError(c, http.StatusBadRequest, ErrCodeConnectionNotFound, "断开连接失败", err.Error())
 		return

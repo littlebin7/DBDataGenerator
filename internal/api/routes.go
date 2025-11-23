@@ -66,6 +66,7 @@ func SetupRoutes(router *gin.Engine, handler *Handler) {
 		api.GET("/tasks/history", handler.GetTaskHistory)
 		api.GET("/task/:id/history", handler.GetTaskHistoryByTaskID)
 		api.DELETE("/task/history/:id", handler.DeleteTaskHistory)
+		api.POST("/tasks/history/batch/delete", handler.BatchDeleteTaskHistory)
 
 		// 数据导入导出
 		api.GET("/export/:connection_id/:database/:table", handler.ExportData)
@@ -100,11 +101,6 @@ func SetupRoutes(router *gin.Engine, handler *Handler) {
 
 		// 性能监控
 		api.GET("/monitor/metrics", handler.GetSystemMetrics)
-
-		// 数据回滚
-		api.POST("/task/:id/rollback", handler.RollbackTask)
-		api.POST("/task/:id/rollback/partial", handler.RollbackPartial)
-		api.GET("/task/:id/rollback", handler.GetRollbackRecord)
 
 		// 任务复制
 		api.POST("/task/:id/clone", handler.CloneTask)

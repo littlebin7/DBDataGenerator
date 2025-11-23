@@ -10,6 +10,7 @@ import (
 	"image/gif"
 	"image/jpeg"
 	"image/png"
+	"math"
 	"math/rand"
 	"os"
 	"path/filepath"
@@ -37,19 +38,24 @@ func (g *RandomStringGenerator) Generate(rule *FieldRule, index int64) (interfac
 		return nil, err
 	}
 
-	minLen := config.MinLength
-	if minLen == 0 {
-		minLen = 10
+	// 如果设置了固定长度，使用固定长度
+	var length int
+	if config.FixedLength > 0 {
+		length = config.FixedLength
+	} else {
+		minLen := config.MinLength
+		if minLen == 0 {
+			minLen = 10
+		}
+		maxLen := config.MaxLength
+		if maxLen == 0 {
+			maxLen = 50
+		}
+		if maxLen < minLen {
+			maxLen = minLen
+		}
+		length = minLen + rand.Intn(maxLen-minLen+1)
 	}
-	maxLen := config.MaxLength
-	if maxLen == 0 {
-		maxLen = 50
-	}
-	if maxLen < minLen {
-		maxLen = minLen
-	}
-
-	length := minLen + rand.Intn(maxLen-minLen+1)
 
 	// 选择字符集
 	var charSet string
@@ -73,13 +79,48 @@ func (g *RandomStringGenerator) Generate(rule *FieldRule, index int64) (interfac
 		}
 	}
 
+	// 处理数字位置
+	numberPosition := config.NumberPosition
+	if numberPosition == "" {
+		numberPosition = "none"
+	}
+
 	// 生成随机字符串
 	result := make([]byte, length)
+	numberChars := "0123456789"
+
 	for i := range result {
-		result[i] = charSet[rand.Intn(len(charSet))]
+		if numberPosition == "start" && i == 0 {
+			// 开头必须是数字
+			result[i] = numberChars[rand.Intn(len(numberChars))]
+		} else if numberPosition == "end" && i == length-1 {
+			// 结尾必须是数字
+			result[i] = numberChars[rand.Intn(len(numberChars))]
+		} else if numberPosition == "random" && rand.Float64() < 0.3 && len(numberChars) > 0 {
+			// 30%概率是数字
+			result[i] = numberChars[rand.Intn(len(numberChars))]
+		} else {
+			// 使用完整字符集
+			result[i] = charSet[rand.Intn(len(charSet))]
+		}
 	}
 
 	str := string(result)
+
+	// 应用大小写
+	caseMode := config.Case
+	if caseMode == "" {
+		caseMode = "mixed"
+	}
+	switch caseMode {
+	case "lower":
+		str = strings.ToLower(str)
+	case "upper":
+		str = strings.ToUpper(str)
+		// "mixed" 保持原样
+	}
+
+	// 应用前缀和后缀
 	if config.Prefix != "" {
 		str = config.Prefix + str
 	}
@@ -105,10 +146,90 @@ func (g *RandomNumberGenerator) Generate(rule *FieldRule, index int64) (interfac
 	}
 
 	var value float64
+
+	// 根据分布类型生成数值
+	distribution := config.Distribution
+	if distribution == "" {
+		distribution = "uniform" // 默认均匀分布
+	}
+
+	switch distribution {
+	case "normal":
+		// 正态分布
+		mean := config.Mean
+		if mean == 0 {
+			mean = (min + max) / 2 // 默认均值为范围中点
+		}
+		stdDev := config.StdDev
+		if stdDev == 0 {
+			stdDev = (max - min) / 6 // 默认标准差为范围的1/6
+		}
+		// 使用Box-Muller变换生成正态分布随机数
+		u1 := rand.Float64()
+		u2 := rand.Float64()
+		z := math.Sqrt(-2*math.Log(u1)) * math.Cos(2*math.Pi*u2)
+		value = mean + z*stdDev
+		// 限制在[min, max]范围内
+		if value < min {
+			value = min
+		}
+		if value > max {
+			value = max
+		}
+	case "exponential":
+		// 指数分布
+		lambda := config.Lambda
+		if lambda <= 0 {
+			lambda = 1.0 / ((max - min) / 2) // 默认lambda
+		}
+		u := rand.Float64()
+		value = min - (1.0/lambda)*math.Log(1-u)
+		// 限制在[min, max]范围内
+		if value > max {
+			value = max
+		}
+		if value < min {
+			value = min
+		}
+	default:
+		// 均匀分布（默认）
+		if config.Step > 0 {
+			// 使用步长
+			steps := int64((max - min) / config.Step)
+			if steps > 0 {
+				stepIndex := rand.Int63n(steps + 1)
+				value = min + float64(stepIndex)*config.Step
+			} else {
+				value = min + rand.Float64()*(max-min)
+			}
+		} else {
+			if config.IsInt {
+				value = float64(int64(min) + rand.Int63n(int64(max-min+1)))
+			} else {
+				value = min + rand.Float64()*(max-min)
+			}
+		}
+	}
+
+	// 应用精度和小数位数
+	if config.Precision > 0 || config.Scale > 0 {
+		scale := config.Scale
+		if scale == 0 && config.Precision > 0 {
+			// 如果没有指定小数位数，根据精度估算
+			scale = config.Precision / 3
+		}
+		// 格式化数值
+		format := fmt.Sprintf("%%.%df", scale)
+		valueStr := fmt.Sprintf(format, value)
+		parsedValue, err := strconv.ParseFloat(valueStr, 64)
+		if err == nil {
+			value = parsedValue
+		}
+	}
+
+	// 如果是整数类型，转换为整数
 	if config.IsInt {
-		value = float64(int64(min) + rand.Int63n(int64(max-min+1)))
-	} else {
-		value = min + rand.Float64()*(max-min)
+		value = float64(int64(value))
 	}
 
 	return value, nil
@@ -136,6 +257,173 @@ func (g *RandomDateGenerator) Generate(rule *FieldRule, index int64) (interface{
 		}
 	}
 
+	// 应用粒度配置
+	var candidateTime time.Time
+	maxAttempts := 100 // 最多尝试100次找到符合条件的日期
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		delta := endDate.Sub(startDate)
+		sec := rand.Int63n(int64(delta.Seconds()))
+		candidateTime = startDate.Add(time.Duration(sec) * time.Second)
+
+		// 检查年范围
+		if len(config.YearRange) == 2 {
+			year := candidateTime.Year()
+			if year < config.YearRange[0] || year > config.YearRange[1] {
+				continue
+			}
+		} else if len(config.YearList) > 0 {
+			year := candidateTime.Year()
+			found := false
+			for _, y := range config.YearList {
+				if year == y {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+
+		// 检查月范围
+		if len(config.MonthRange) == 2 {
+			month := int(candidateTime.Month())
+			if month < config.MonthRange[0] || month > config.MonthRange[1] {
+				continue
+			}
+		} else if len(config.MonthList) > 0 {
+			month := int(candidateTime.Month())
+			found := false
+			for _, m := range config.MonthList {
+				if month == m {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+
+		// 检查日范围
+		if len(config.DayRange) == 2 {
+			day := candidateTime.Day()
+			if day < config.DayRange[0] || day > config.DayRange[1] {
+				continue
+			}
+		} else if len(config.DayList) > 0 {
+			day := candidateTime.Day()
+			found := false
+			for _, d := range config.DayList {
+				if day == d {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+
+		// 检查小时范围
+		if len(config.HourRange) == 2 {
+			hour := candidateTime.Hour()
+			if hour < config.HourRange[0] || hour > config.HourRange[1] {
+				continue
+			}
+		} else if len(config.HourList) > 0 {
+			hour := candidateTime.Hour()
+			found := false
+			for _, h := range config.HourList {
+				if hour == h {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+
+		// 检查分钟范围
+		if len(config.MinuteRange) == 2 {
+			minute := candidateTime.Minute()
+			if minute < config.MinuteRange[0] || minute > config.MinuteRange[1] {
+				continue
+			}
+		} else if len(config.MinuteList) > 0 {
+			minute := candidateTime.Minute()
+			found := false
+			for _, m := range config.MinuteList {
+				if minute == m {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+
+		// 检查秒范围
+		if len(config.SecondRange) == 2 {
+			second := candidateTime.Second()
+			if second < config.SecondRange[0] || second > config.SecondRange[1] {
+				continue
+			}
+		} else if len(config.SecondList) > 0 {
+			second := candidateTime.Second()
+			found := false
+			for _, s := range config.SecondList {
+				if second == s {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+
+		// 检查星期
+		if len(config.WeekdayList) > 0 {
+			weekday := int(candidateTime.Weekday())
+			found := false
+			for _, w := range config.WeekdayList {
+				if weekday == w {
+					found = true
+					break
+				}
+			}
+			if !found {
+				continue
+			}
+		}
+
+		// 检查仅工作日
+		if config.OnlyWeekdays {
+			weekday := candidateTime.Weekday()
+			if weekday == time.Saturday || weekday == time.Sunday {
+				continue
+			}
+		}
+
+		// 检查仅周末
+		if config.OnlyWeekends {
+			weekday := candidateTime.Weekday()
+			if weekday != time.Saturday && weekday != time.Sunday {
+				continue
+			}
+		}
+
+		// 所有条件都满足
+		if config.Format != "" {
+			return candidateTime.Format(config.Format), nil
+		}
+		return candidateTime, nil
+	}
+
+	// 如果尝试多次都找不到符合条件的日期，返回随机日期（不应用粒度限制）
 	delta := endDate.Sub(startDate)
 	sec := rand.Int63n(int64(delta.Seconds()))
 	randomTime := startDate.Add(time.Duration(sec) * time.Second)

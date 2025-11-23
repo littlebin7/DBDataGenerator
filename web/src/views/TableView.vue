@@ -33,10 +33,12 @@
 
       <el-table :data="filteredTables" style="width: 100%" v-loading="loading">
         <el-table-column prop="name" label="表名" />
-        <el-table-column label="操作" width="250">
+        <el-table-column label="操作" width="200">
           <template #default="scope">
-            <el-button size="small" @click="viewSchema(scope.row.name)">查看结构</el-button>
-            <el-button type="primary" size="small" @click="createTask(scope.row.name)">创建任务</el-button>
+            <div style="display: flex; gap: 4px;">
+              <el-button size="small" @click="viewSchema(scope.row.name)">查看结构</el-button>
+              <el-button type="primary" size="small" @click="createTask(scope.row.name)">创建任务</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -112,7 +114,13 @@ const loadTables = async () => {
     const response = await api.getTables(selectedDatabase.value || '')
     tables.value = response.tables.map(name => ({ name }))
   } catch (error) {
-    ElMessage.error('获取表列表失败: ' + (error.formattedMessage || error.message))
+    const errorMsg = error.formattedMessage || error.message || ''
+    // 如果是连接失败的错误，提供更友好的提示
+    if (errorMsg.includes('连接失败') || errorMsg.includes('连接未建立') || errorMsg.includes('请先连接')) {
+      ElMessage.warning('数据库连接失败，系统已尝试自动重连。如果问题持续，请检查连接配置')
+    } else {
+      ElMessage.error('获取表列表失败: ' + errorMsg)
+    }
   } finally {
     loading.value = false
   }
@@ -129,7 +137,13 @@ const viewSchema = async (tableName) => {
     tableSchema.value = response
     showSchemaDialog.value = true
   } catch (error) {
-    ElMessage.error('获取表结构失败: ' + (error.formattedMessage || error.message))
+    const errorMsg = error.formattedMessage || error.message || ''
+    // 如果是连接失败的错误，提供更友好的提示
+    if (errorMsg.includes('连接失败') || errorMsg.includes('连接未建立') || errorMsg.includes('请先连接')) {
+      ElMessage.warning('数据库连接失败，系统已尝试自动重连。如果问题持续，请检查连接配置')
+    } else {
+      ElMessage.error('获取表结构失败: ' + errorMsg)
+    }
   }
 }
 

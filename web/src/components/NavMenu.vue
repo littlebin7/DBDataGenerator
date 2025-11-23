@@ -56,10 +56,6 @@
         <el-icon><Files /></el-icon>
         <span>模板管理</span>
       </el-menu-item>
-      <el-menu-item index="/rollback">
-        <el-icon><RefreshLeft /></el-icon>
-        <span>数据回滚</span>
-      </el-menu-item>
     </el-sub-menu>
 
     <el-sub-menu index="monitor">
@@ -102,8 +98,7 @@ import {
   DocumentChecked,
   Monitor,
   DataLine,
-  Files,
-  RefreshLeft
+  Files
 } from '@element-plus/icons-vue'
 
 const route = useRoute()

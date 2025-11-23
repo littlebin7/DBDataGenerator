@@ -3,7 +3,6 @@ package api
 import (
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -11,7 +10,6 @@ import (
 	"DBDataGenerator/internal/monitor"
 	"DBDataGenerator/internal/poolmonitor"
 	"DBDataGenerator/internal/quality"
-	"DBDataGenerator/internal/rollback"
 )
 
 // CheckDataQuality 检查数据质量
@@ -78,152 +76,6 @@ func (h *Handler) GetSystemMetrics(c *gin.Context) {
 		"system": metrics,
 		"tasks":  taskMetrics,
 	})
-}
-
-// RollbackTask 回滚任务生成的数据
-func (h *Handler) RollbackTask(c *gin.Context) {
-	taskID := c.Param("id")
-	if taskID == "" {
-		h.sendError(c, http.StatusBadRequest, ErrCodeInvalidRequest, "任务ID不能为空")
-		return
-	}
-
-	// 获取任务信息
-	task, err := h.taskManager.GetTask(taskID)
-	if err != nil {
-		h.sendError(c, http.StatusNotFound, ErrCodeTaskNotFound, "任务不存在", err.Error())
-		return
-	}
-
-	// 获取连接
-	conn, err := h.connMgr.GetConnection(task.ConnectionID)
-	if err != nil {
-		h.sendError(c, http.StatusNotFound, ErrCodeConnectionNotFound, "连接不存在", err.Error())
-		return
-	}
-
-	if conn.Database == nil {
-		h.sendError(c, http.StatusBadRequest, ErrCodeConnectionFailed, "数据库连接未建立")
-		return
-	}
-
-	// 创建回滚管理器
-	rollbackMgr := rollback.NewRollbackManager(conn.Database, h.storage, h.logger)
-
-	// 执行回滚
-	if err := rollbackMgr.RollbackTask(taskID); err != nil {
-		h.logger.Error("回滚任务失败", zap.Error(err), zap.String("task_id", taskID))
-		h.sendError(c, http.StatusInternalServerError, ErrCodeInternalError, "回滚失败", err.Error())
-		return
-	}
-
-	h.sendSuccess(c, nil, "回滚成功")
-}
-
-// RollbackPartial 部分回滚（按数量或时间范围）
-func (h *Handler) RollbackPartial(c *gin.Context) {
-	taskID := c.Param("id")
-	if taskID == "" {
-		h.sendError(c, http.StatusBadRequest, ErrCodeInvalidRequest, "任务ID不能为空")
-		return
-	}
-
-	var req struct {
-		RowCount  *int64  `json:"row_count"`  // 回滚的行数（可选）
-		TimeRange *string `json:"time_range"` // 时间范围，如 "1h", "30m"（可选）
-	}
-
-	if err := c.ShouldBindJSON(&req); err != nil {
-		h.sendError(c, http.StatusBadRequest, ErrCodeInvalidRequest, "请求参数错误", err.Error())
-		return
-	}
-
-	// 获取任务信息
-	task, err := h.taskManager.GetTask(taskID)
-	if err != nil {
-		h.sendError(c, http.StatusNotFound, ErrCodeTaskNotFound, "任务不存在", err.Error())
-		return
-	}
-
-	// 获取连接
-	conn, err := h.connMgr.GetConnection(task.ConnectionID)
-	if err != nil {
-		h.sendError(c, http.StatusNotFound, ErrCodeConnectionNotFound, "连接不存在", err.Error())
-		return
-	}
-
-	if conn.Database == nil {
-		h.sendError(c, http.StatusBadRequest, ErrCodeConnectionFailed, "数据库连接未建立")
-		return
-	}
-
-	// 创建回滚管理器
-	rollbackMgr := rollback.NewRollbackManager(conn.Database, h.storage, h.logger)
-
-	// 解析时间范围
-	var timeRange *time.Duration
-	if req.TimeRange != nil && *req.TimeRange != "" {
-		duration, err := time.ParseDuration(*req.TimeRange)
-		if err != nil {
-			h.sendError(c, http.StatusBadRequest, ErrCodeInvalidRequest, "时间范围格式错误", err.Error())
-			return
-		}
-		timeRange = &duration
-	}
-
-	// 执行部分回滚
-	var rowCount int64
-	if req.RowCount != nil {
-		rowCount = *req.RowCount
-	}
-
-	if err := rollbackMgr.RollbackPartial(taskID, rowCount, timeRange); err != nil {
-		h.logger.Error("部分回滚失败", zap.Error(err), zap.String("task_id", taskID))
-		h.sendError(c, http.StatusInternalServerError, ErrCodeInternalError, "部分回滚失败", err.Error())
-		return
-	}
-
-	h.sendSuccess(c, nil, "部分回滚成功")
-}
-
-// GetRollbackRecord 获取回滚记录
-func (h *Handler) GetRollbackRecord(c *gin.Context) {
-	taskID := c.Param("id")
-	if taskID == "" {
-		h.sendError(c, http.StatusBadRequest, ErrCodeInvalidRequest, "任务ID不能为空")
-		return
-	}
-
-	// 获取任务信息
-	task, err := h.taskManager.GetTask(taskID)
-	if err != nil {
-		h.sendError(c, http.StatusNotFound, ErrCodeTaskNotFound, "任务不存在", err.Error())
-		return
-	}
-
-	// 获取连接
-	conn, err := h.connMgr.GetConnection(task.ConnectionID)
-	if err != nil {
-		h.sendError(c, http.StatusNotFound, ErrCodeConnectionNotFound, "连接不存在", err.Error())
-		return
-	}
-
-	if conn.Database == nil {
-		h.sendError(c, http.StatusBadRequest, ErrCodeConnectionFailed, "数据库连接未建立")
-		return
-	}
-
-	// 创建回滚管理器
-	rollbackMgr := rollback.NewRollbackManager(conn.Database, h.storage, h.logger)
-
-	// 获取回滚记录
-	record, err := rollbackMgr.GetRollbackRecord(taskID)
-	if err != nil {
-		h.sendError(c, http.StatusNotFound, ErrCodeNotFound, "回滚记录不存在", err.Error())
-		return
-	}
-
-	h.sendSuccess(c, record)
 }
 
 // CloneTask 复制任务

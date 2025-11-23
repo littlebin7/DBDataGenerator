@@ -47,18 +47,18 @@ func NewHistoryManager(storage storage.StorageInterface) *HistoryManager {
 // SaveHistory 保存任务历史
 func (hm *HistoryManager) SaveHistory(task *Task) error {
 	now := time.Now()
-	var startTime, endTime *int64
+	var startTime, endTime sql.NullInt64
 	var duration int64
 
 	if task.StartTime != nil {
 		startTimeVal := task.StartTime.Unix()
-		startTime = &startTimeVal
+		startTime = sql.NullInt64{Int64: startTimeVal, Valid: true}
 	}
 	if task.EndTime != nil {
 		endTimeVal := task.EndTime.Unix()
-		endTime = &endTimeVal
-		if startTime != nil {
-			duration = endTimeVal - *startTime
+		endTime = sql.NullInt64{Int64: endTimeVal, Valid: true}
+		if startTime.Valid {
+			duration = endTimeVal - startTime.Int64
 		}
 	}
 
