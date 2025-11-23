@@ -109,12 +109,19 @@
                     style="width: 100px"
                     @change="() => validateFieldRule(scope.row)"
                   />
-                  <el-select v-model="scope.row.config.charSet" size="small" style="width: 120px">
+                  <el-select 
+                    v-model="scope.row.config.charSet" 
+                    multiple
+                    collapse-tags
+                    collapse-tags-tooltip
+                    size="small" 
+                    style="width: 200px"
+                    placeholder="选择字符类型"
+                  >
                     <el-option label="字母" value="letters" />
                     <el-option label="数字" value="numbers" />
                     <el-option label="中文" value="chinese" />
                     <el-option label="特殊字符" value="special" />
-                    <el-option label="全部" value="all" />
                   </el-select>
                   <el-tooltip
                     v-if="getFieldBoundaryInfo(scope.row) || validateFieldRule(scope.row).valid === false"
@@ -204,44 +211,50 @@
               <div v-if="scope.row.ruleType === 'random_number'" style="display: flex; flex-direction: column; gap: 10px">
                 <!-- 基础配置 -->
                 <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
-                  <el-input-number 
-                    v-model="scope.row.config.min" 
-                    :precision="scope.row.config.isInt ? 0 : 2"
-                    :min="getNumericFieldRange(scope.row).min"
-                    :max="getNumericFieldRange(scope.row).max"
-                    placeholder="最小值"
-                    size="small"
-                    style="width: 120px"
-                    @change="() => { 
-                      const range = getNumericFieldRange(scope.row)
-                      if (scope.row.config.min < range.min) scope.row.config.min = range.min
-                      if (scope.row.config.min > range.max) scope.row.config.min = range.max
-                      if (scope.row.config.max !== undefined && scope.row.config.max < scope.row.config.min) {
-                        scope.row.config.max = scope.row.config.min
-                      }
-                      if (isIntType(scope.row)) scope.row.config.isInt = true
-                      validateFieldRule(scope.row) 
-                    }"
-                  />
-                  <el-input-number 
-                    v-model="scope.row.config.max" 
-                    :precision="scope.row.config.isInt ? 0 : 2"
-                    :min="getNumericFieldRange(scope.row).min"
-                    :max="getNumericFieldRange(scope.row).max"
-                    placeholder="最大值"
-                    size="small"
-                    style="width: 120px"
-                    @change="() => { 
-                      const range = getNumericFieldRange(scope.row)
-                      if (scope.row.config.max < range.min) scope.row.config.max = range.min
-                      if (scope.row.config.max > range.max) scope.row.config.max = range.max
-                      if (scope.row.config.min !== undefined && scope.row.config.min > scope.row.config.max) {
-                        scope.row.config.min = scope.row.config.max
-                      }
-                      if (isIntType(scope.row)) scope.row.config.isInt = true
-                      validateFieldRule(scope.row) 
-                    }"
-                  />
+                  <div style="display: flex; gap: 5px; align-items: center;">
+                    <span style="font-size: 12px; color: #606266; white-space: nowrap;">最小值:</span>
+                    <el-input-number 
+                      v-model="scope.row.config.min" 
+                      :precision="scope.row.config.isInt ? 0 : 2"
+                      :min="getNumericFieldRange(scope.row).min"
+                      :max="getNumericFieldRange(scope.row).max"
+                      placeholder="最小值"
+                      size="small"
+                      style="width: 120px"
+                      @change="() => { 
+                        const range = getNumericFieldRange(scope.row)
+                        if (scope.row.config.min < range.min) scope.row.config.min = range.min
+                        if (scope.row.config.min > range.max) scope.row.config.min = range.max
+                        if (scope.row.config.max !== undefined && scope.row.config.max < scope.row.config.min) {
+                          scope.row.config.max = scope.row.config.min
+                        }
+                        if (isIntType(scope.row)) scope.row.config.isInt = true
+                        validateFieldRule(scope.row) 
+                      }"
+                    />
+                  </div>
+                  <div style="display: flex; gap: 5px; align-items: center;">
+                    <span style="font-size: 12px; color: #606266; white-space: nowrap;">最大值:</span>
+                    <el-input-number 
+                      v-model="scope.row.config.max" 
+                      :precision="scope.row.config.isInt ? 0 : 2"
+                      :min="getNumericFieldRange(scope.row).min"
+                      :max="getNumericFieldRange(scope.row).max"
+                      placeholder="最大值"
+                      size="small"
+                      style="width: 120px"
+                      @change="() => { 
+                        const range = getNumericFieldRange(scope.row)
+                        if (scope.row.config.max < range.min) scope.row.config.max = range.min
+                        if (scope.row.config.max > range.max) scope.row.config.max = range.max
+                        if (scope.row.config.min !== undefined && scope.row.config.min > scope.row.config.max) {
+                          scope.row.config.min = scope.row.config.max
+                        }
+                        if (isIntType(scope.row)) scope.row.config.isInt = true
+                        validateFieldRule(scope.row) 
+                      }"
+                    />
+                  </div>
                   <el-checkbox 
                     v-model="scope.row.config.isInt" 
                     size="small" 
@@ -364,8 +377,15 @@
                 </el-collapse>
               </div>
   
-              <!-- 随机日期配置 -->
+              <!-- 随机日期/日期时间配置 -->
               <div v-if="scope.row.ruleType === 'random_date'" style="display: flex; flex-direction: column; gap: 10px">
+                <!-- 根据字段类型显示不同的标题 -->
+                <div v-if="isTimestampType(scope.row)" style="font-size: 12px; color: #909399; margin-bottom: 5px;">
+                  日期时间配置（包含日期和时间）
+                </div>
+                <div v-else-if="isDateOnlyType(scope.row)" style="font-size: 12px; color: #909399; margin-bottom: 5px;">
+                  随机日期配置（仅日期）
+                </div>
                 <!-- 基础配置 -->
                 <div style="display: flex; flex-direction: column; gap: 10px">
                   <!-- 日期范围 -->
@@ -411,18 +431,19 @@
                     </el-tooltip>
                   </div>
                   <!-- 时间配置（仅日期时间类型显示） -->
-                  <div v-if="isTimestampType(scope.row)" style="display: flex; flex-direction: column; gap: 10px">
-                    <div style="display: flex; gap: 10px; align-items: center">
+                  <div v-if="isTimestampType(scope.row)" style="display: flex; flex-direction: column; gap: 10px; padding: 10px; background: #f5f7fa; border-radius: 4px;">
+                    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 5px;">
+                      <span style="font-size: 12px; color: #606266; font-weight: 500;">时间配置:</span>
                       <el-checkbox 
                         v-model="scope.row.config.fullDay" 
                         size="small"
                         @change="() => validateFieldRule(scope.row)"
                       >
-                        一整天
+                        一整天（00:00:00 - 23:59:59）
                       </el-checkbox>
                     </div>
                     <div v-if="!scope.row.config.fullDay" style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
-                      <span style="width: 80px; font-size: 12px;">开始时间:</span>
+                      <span style="width: 80px; font-size: 12px;">时间区间:</span>
                       <el-time-picker
                         v-model="scope.row.config.startTime"
                         placeholder="开始时间"
@@ -431,7 +452,7 @@
                         value-format="HH:mm:ss"
                         @change="() => validateFieldRule(scope.row)"
                       />
-                      <span style="width: 80px; font-size: 12px;">结束时间:</span>
+                      <span style="font-size: 12px; color: #909399;">至</span>
                       <el-time-picker
                         v-model="scope.row.config.endTime"
                         placeholder="结束时间"
@@ -442,207 +463,54 @@
                       />
                     </div>
                   </div>
-                </div>
-                <!-- 粒度配置（可折叠） -->
-                <el-collapse v-model="scope.row.showGranularity" style="border: none;">
-                  <el-collapse-item :name="scope.row.fieldName + '_granularity'" style="border: none;">
-                    <template #title>
-                      <span style="font-size: 12px; color: #909399;">高级配置（粒度控制）</span>
-                    </template>
-                    <div style="display: flex; flex-direction: column; gap: 10px; padding: 10px; background: #f5f7fa; border-radius: 4px;">
-                      <!-- 年 -->
-                      <div style="display: flex; gap: 10px; align-items: center">
-                        <span style="width: 80px; font-size: 12px;">年:</span>
-                        <el-input-number 
-                          v-model="scope.row.config.yearRange[0]" 
-                          :min="1900"
-                          :max="2100"
-                          placeholder="最小年"
-                          size="small"
-                          style="width: 100px"
-                          @change="() => validateFieldRule(scope.row)"
-                        />
-                        <span style="font-size: 12px;">~</span>
-                        <el-input-number 
-                          v-model="scope.row.config.yearRange[1]" 
-                          :min="1900"
-                          :max="2100"
-                          placeholder="最大年"
-                          size="small"
-                          style="width: 100px"
-                          @change="() => validateFieldRule(scope.row)"
-                        />
-                        <el-button size="small" text @click="scope.row.config.yearRange = null">清除</el-button>
-                      </div>
-                      <!-- 月 -->
-                      <div style="display: flex; gap: 10px; align-items: center">
-                        <span style="width: 80px; font-size: 12px;">月:</span>
-                        <el-input-number 
-                          v-model="scope.row.config.monthRange[0]" 
-                          :min="1"
-                          :max="12"
-                          placeholder="最小月"
-                          size="small"
-                          style="width: 100px"
-                          @change="() => validateFieldRule(scope.row)"
-                        />
-                        <span style="font-size: 12px;">~</span>
-                        <el-input-number 
-                          v-model="scope.row.config.monthRange[1]" 
-                          :min="1"
-                          :max="12"
-                          placeholder="最大月"
-                          size="small"
-                          style="width: 100px"
-                          @change="() => validateFieldRule(scope.row)"
-                        />
-                        <el-button size="small" text @click="scope.row.config.monthRange = null">清除</el-button>
-                      </div>
-                      <!-- 日 -->
-                      <div style="display: flex; gap: 10px; align-items: center">
-                        <span style="width: 80px; font-size: 12px;">日:</span>
-                        <el-input-number 
-                          v-model="scope.row.config.dayRange[0]" 
-                          :min="1"
-                          :max="31"
-                          placeholder="最小日"
-                          size="small"
-                          style="width: 100px"
-                          @change="() => validateFieldRule(scope.row)"
-                        />
-                        <span style="font-size: 12px;">~</span>
-                        <el-input-number 
-                          v-model="scope.row.config.dayRange[1]" 
-                          :min="1"
-                          :max="31"
-                          placeholder="最大日"
-                          size="small"
-                          style="width: 100px"
-                          @change="() => validateFieldRule(scope.row)"
-                        />
-                        <el-button size="small" text @click="scope.row.config.dayRange = null">清除</el-button>
-                      </div>
-                      <!-- 小时 -->
-                      <div style="display: flex; gap: 10px; align-items: center">
-                        <span style="width: 80px; font-size: 12px;">小时:</span>
-                        <el-input-number 
-                          v-model="scope.row.config.hourRange[0]" 
-                          :min="0"
-                          :max="23"
-                          placeholder="最小小时"
-                          size="small"
-                          style="width: 100px"
-                          @change="() => validateFieldRule(scope.row)"
-                        />
-                        <span style="font-size: 12px;">~</span>
-                        <el-input-number 
-                          v-model="scope.row.config.hourRange[1]" 
-                          :min="0"
-                          :max="23"
-                          placeholder="最大小时"
-                          size="small"
-                          style="width: 100px"
-                          @change="() => validateFieldRule(scope.row)"
-                        />
-                        <el-button size="small" text @click="scope.row.config.hourRange = null">清除</el-button>
-                      </div>
-                      <!-- 分钟 -->
-                      <div style="display: flex; gap: 10px; align-items: center">
-                        <span style="width: 80px; font-size: 12px;">分钟:</span>
-                        <el-input-number 
-                          v-model="scope.row.config.minuteRange[0]" 
-                          :min="0"
-                          :max="59"
-                          placeholder="最小分钟"
-                          size="small"
-                          style="width: 100px"
-                          @change="() => validateFieldRule(scope.row)"
-                        />
-                        <span style="font-size: 12px;">~</span>
-                        <el-input-number 
-                          v-model="scope.row.config.minuteRange[1]" 
-                          :min="0"
-                          :max="59"
-                          placeholder="最大分钟"
-                          size="small"
-                          style="width: 100px"
-                          @change="() => validateFieldRule(scope.row)"
-                        />
-                        <el-button size="small" text @click="scope.row.config.minuteRange = null">清除</el-button>
-                      </div>
-                      <!-- 秒 -->
-                      <div style="display: flex; gap: 10px; align-items: center">
-                        <span style="width: 80px; font-size: 12px;">秒:</span>
-                        <el-input-number 
-                          v-model="scope.row.config.secondRange[0]" 
-                          :min="0"
-                          :max="59"
-                          placeholder="最小秒"
-                          size="small"
-                          style="width: 100px"
-                          @change="() => validateFieldRule(scope.row)"
-                        />
-                        <span style="font-size: 12px;">~</span>
-                        <el-input-number 
-                          v-model="scope.row.config.secondRange[1]" 
-                          :min="0"
-                          :max="59"
-                          placeholder="最大秒"
-                          size="small"
-                          style="width: 100px"
-                          @change="() => validateFieldRule(scope.row)"
-                        />
-                        <el-button size="small" text @click="scope.row.config.secondRange = null">清除</el-button>
-                      </div>
-                      <!-- 星期 -->
-                      <div style="display: flex; flex-direction: column; gap: 10px">
-                        <div style="display: flex; gap: 10px; align-items: center">
-                          <span style="width: 80px; font-size: 12px;">星期:</span>
-                          <el-radio-group 
-                            v-model="scope.row.config.weekdayMode" 
-                            size="small"
-                            @change="() => {
-                              if (scope.row.config.weekdayMode === 'all') {
-                                scope.row.config.weekdayList = []
-                              } else if (scope.row.config.weekdayMode === 'weekdays') {
-                                scope.row.config.weekdayList = [1, 2, 3, 4, 5]
-                              } else if (scope.row.config.weekdayMode === 'custom') {
-                                scope.row.config.weekdayList = scope.row.config.weekdayCustom || [1, 2, 3, 4, 5]
-                              }
-                              validateFieldRule(scope.row)
-                            }"
-                          >
-                            <el-radio label="all">全部</el-radio>
-                            <el-radio label="weekdays">工作日</el-radio>
-                            <el-radio label="custom">自定义</el-radio>
-                          </el-radio-group>
-                        </div>
-                        <!-- 自定义星期复选框 -->
-                        <div v-if="scope.row.config.weekdayMode === 'custom'" style="display: flex; gap: 10px; align-items: center; margin-left: 80px;">
-                          <el-checkbox-group 
-                            v-model="scope.row.config.weekdayCustom"
-                            @change="() => {
-                              scope.row.config.weekdayList = scope.row.config.weekdayCustom || []
-                              validateFieldRule(scope.row)
-                            }"
-                          >
-                            <el-checkbox :label="1" size="small">星期一</el-checkbox>
-                            <el-checkbox :label="2" size="small">星期二</el-checkbox>
-                            <el-checkbox :label="3" size="small">星期三</el-checkbox>
-                            <el-checkbox :label="4" size="small">星期四</el-checkbox>
-                            <el-checkbox :label="5" size="small">星期五</el-checkbox>
-                            <el-checkbox :label="6" size="small">星期六</el-checkbox>
-                            <el-checkbox :label="0" size="small">星期日</el-checkbox>
-                          </el-checkbox-group>
-                        </div>
-                      </div>
+                  <!-- 星期配置 -->
+                  <div style="display: flex; flex-direction: column; gap: 10px">
+                    <div style="display: flex; gap: 10px; align-items: center">
+                      <span style="width: 80px; font-size: 12px;">星期:</span>
+                      <el-radio-group 
+                        v-model="scope.row.config.weekdayMode" 
+                        size="small"
+                        @change="() => {
+                          if (scope.row.config.weekdayMode === 'all') {
+                            scope.row.config.weekdayList = []
+                          } else if (scope.row.config.weekdayMode === 'weekdays') {
+                            scope.row.config.weekdayList = [1, 2, 3, 4, 5]
+                          } else if (scope.row.config.weekdayMode === 'custom') {
+                            scope.row.config.weekdayList = scope.row.config.weekdayCustom || [1, 2, 3, 4, 5]
+                          }
+                          validateFieldRule(scope.row)
+                        }"
+                      >
+                        <el-radio label="all">全部</el-radio>
+                        <el-radio label="weekdays">工作日</el-radio>
+                        <el-radio label="custom">自定义</el-radio>
+                      </el-radio-group>
                     </div>
-                  </el-collapse-item>
-                </el-collapse>
+                    <!-- 自定义星期复选框 -->
+                    <div v-if="scope.row.config.weekdayMode === 'custom'" style="display: flex; gap: 10px; align-items: center; margin-left: 80px;">
+                      <el-checkbox-group 
+                        v-model="scope.row.config.weekdayCustom"
+                        @change="() => {
+                          scope.row.config.weekdayList = scope.row.config.weekdayCustom || []
+                          validateFieldRule(scope.row)
+                        }"
+                      >
+                        <el-checkbox :label="1" size="small">星期一</el-checkbox>
+                        <el-checkbox :label="2" size="small">星期二</el-checkbox>
+                        <el-checkbox :label="3" size="small">星期三</el-checkbox>
+                        <el-checkbox :label="4" size="small">星期四</el-checkbox>
+                        <el-checkbox :label="5" size="small">星期五</el-checkbox>
+                        <el-checkbox :label="6" size="small">星期六</el-checkbox>
+                        <el-checkbox :label="0" size="small">星期日</el-checkbox>
+                      </el-checkbox-group>
+                    </div>
+                  </div>
+                </div>
               </div>
   
               <!-- 固定值配置 -->
               <div v-if="scope.row.ruleType === 'fixed'" style="display: flex; gap: 8px; align-items: center">
+                <span style="font-size: 12px; color: #606266; white-space: nowrap;">固定值:</span>
                 <el-input 
                   v-model="scope.row.config.value" 
                   placeholder="输入固定值"
@@ -668,20 +536,36 @@
               <div v-if="scope.row.ruleType === 'increment'" style="display: flex; flex-direction: column; gap: 10px">
                 <!-- 基础配置 -->
                 <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
-                  <el-input-number 
-                    v-model="scope.row.config.startValue" 
-                    placeholder="起始值"
-                    size="small"
-                    style="width: 120px"
-                    @change="() => validateFieldRule(scope.row)"
-                  />
-                  <el-input-number 
-                    v-model="scope.row.config.step" 
-                    placeholder="步长"
-                    size="small"
-                    style="width: 120px"
-                    @change="() => validateFieldRule(scope.row)"
-                  />
+                  <div style="display: flex; gap: 5px; align-items: center;">
+                    <span style="font-size: 12px; color: #606266; white-space: nowrap;">起始值:</span>
+                    <el-input-number 
+                      v-model="scope.row.config.startValue" 
+                      placeholder="起始值"
+                      size="small"
+                      style="width: 120px"
+                      @change="() => validateFieldRule(scope.row)"
+                    />
+                  </div>
+                  <div style="display: flex; gap: 5px; align-items: center;">
+                    <span style="font-size: 12px; color: #606266; white-space: nowrap;">步长:</span>
+                    <el-input-number 
+                      v-model="scope.row.config.step" 
+                      placeholder="步长"
+                      size="small"
+                      style="width: 120px"
+                      @change="() => validateFieldRule(scope.row)"
+                    />
+                  </div>
+                  <div style="display: flex; gap: 5px; align-items: center;">
+                    <span style="font-size: 12px; color: #606266; white-space: nowrap;">最大值:</span>
+                    <el-input-number 
+                      v-model="scope.row.config.maxValue" 
+                      placeholder="最大值（循环时使用）"
+                      size="small"
+                      style="width: 120px"
+                      @change="() => validateFieldRule(scope.row)"
+                    />
+                  </div>
                   <el-checkbox v-model="scope.row.config.cycle" size="small">循环</el-checkbox>
                   <el-tooltip
                     v-if="getFieldBoundaryInfo(scope.row) || validateFieldRule(scope.row).valid === false"
@@ -696,59 +580,17 @@
                     </el-icon>
                   </el-tooltip>
                 </div>
-                <!-- 粒度配置（可折叠） -->
-                <el-collapse v-model="scope.row.showGranularity" style="border: none;">
-                  <el-collapse-item :name="scope.row.fieldName + '_granularity'" style="border: none;">
-                    <template #title>
-                      <span style="font-size: 12px; color: #909399;">高级配置（粒度控制）</span>
-                    </template>
-                    <div style="display: flex; flex-direction: column; gap: 10px; padding: 10px; background: #f5f7fa; border-radius: 4px;">
-                      <!-- 最大值（循环时使用） -->
-                      <div style="display: flex; gap: 10px; align-items: center">
-                        <span style="width: 80px; font-size: 12px;">最大值:</span>
-                        <el-input-number 
-                          v-model="scope.row.config.maxValue" 
-                          placeholder="最大值（循环时使用，0表示不限制）"
-                          size="small"
-                          style="width: 200px"
-                          @change="() => validateFieldRule(scope.row)"
-                        />
-                      </div>
-                      <!-- 格式（用于字符串类型） -->
-                      <div v-if="scope.row.fieldType.toLowerCase().includes('varchar') || scope.row.fieldType.toLowerCase().includes('char')" style="display: flex; gap: 10px; align-items: center">
-                        <span style="width: 80px; font-size: 12px;">格式:</span>
-                        <el-input 
-                          v-model="scope.row.config.format" 
-                          placeholder="格式（如 USER_{:05d} 表示 USER_00001）"
-                          size="small"
-                          style="flex: 1"
-                          @blur="() => validateFieldRule(scope.row)"
-                        />
-                      </div>
-                      <!-- 精度和小数位数（用于数字类型） -->
-                      <div v-if="scope.row.goType && (scope.row.goType.includes('int') || scope.row.goType.includes('float') || scope.row.goType.includes('decimal'))" style="display: flex; gap: 10px; align-items: center">
-                        <span style="width: 80px; font-size: 12px;">精度:</span>
-                        <el-input-number 
-                          v-model="scope.row.config.precision" 
-                          :min="0"
-                          placeholder="总位数"
-                          size="small"
-                          style="width: 120px"
-                          @change="() => validateFieldRule(scope.row)"
-                        />
-                        <span style="font-size: 12px; color: #909399;">小数位:</span>
-                        <el-input-number 
-                          v-model="scope.row.config.scale" 
-                          :min="0"
-                          placeholder="小数位数"
-                          size="small"
-                          style="width: 120px"
-                          @change="() => validateFieldRule(scope.row)"
-                        />
-                      </div>
-                    </div>
-                  </el-collapse-item>
-                </el-collapse>
+                <!-- 格式（用于字符串类型） -->
+                <div v-if="scope.row.fieldType.toLowerCase().includes('varchar') || scope.row.fieldType.toLowerCase().includes('char')" style="display: flex; gap: 10px; align-items: center">
+                  <span style="font-size: 12px; color: #606266; white-space: nowrap;">格式:</span>
+                  <el-input 
+                    v-model="scope.row.config.format" 
+                    placeholder="格式（如 USER_{:05d} 表示 USER_00001）"
+                    size="small"
+                    style="width: 300px"
+                    @blur="() => validateFieldRule(scope.row)"
+                  />
+                </div>
               </div>
   
               <!-- 列表配置 -->
@@ -811,35 +653,88 @@
   
               <!-- 正则表达式配置 -->
               <div v-if="scope.row.ruleType === 'regex'" style="display: flex; flex-direction: column; gap: 8px">
-                <el-select 
-                  v-model="scope.row.config.presetPattern" 
-                  placeholder="选择常用正则表达式"
-                  size="small"
-                  clearable
-                  @change="handleRegexPresetChange(scope.row)"
-                >
-                  <el-option label="IP地址" value="ip" />
-                  <el-option label="邮箱地址" value="email" />
-                  <el-option label="手机号（中国）" value="phone_cn" />
-                  <el-option label="身份证号（中国）" value="idcard_cn" />
-                  <el-option label="URL地址" value="url" />
-                  <el-option label="日期（YYYY-MM-DD）" value="date" />
-                  <el-option label="时间（HH:MM:SS）" value="time" />
-                  <el-option label="邮政编码（中国）" value="postcode_cn" />
-                  <el-option label="车牌号（中国）" value="license_plate_cn" />
-                  <el-option label="自定义" value="custom" />
-                </el-select>
-                <el-input 
-                  v-model="scope.row.config.pattern" 
-                  placeholder="输入正则表达式（选择预设会自动填充）"
-                  size="small"
-                  @input="handleRegexPatternInput(scope.row)"
-                />
+                <div style="display: flex; gap: 5px; align-items: center;">
+                  <span style="font-size: 12px; color: #606266; white-space: nowrap;">预设:</span>
+                  <el-select 
+                    v-model="scope.row.config.presetPattern" 
+                    placeholder="选择常用正则表达式"
+                    size="small"
+                    clearable
+                    style="flex: 1"
+                    @change="handleRegexPresetChange(scope.row)"
+                  >
+                    <el-option label="IP地址" value="ip" />
+                    <el-option label="邮箱地址" value="email" />
+                    <el-option label="手机号（中国）" value="phone_cn" />
+                    <el-option label="身份证号（中国）" value="idcard_cn" />
+                    <el-option label="URL地址" value="url" />
+                    <el-option label="日期（YYYY-MM-DD）" value="date" />
+                    <el-option label="时间（HH:MM:SS）" value="time" />
+                    <el-option label="邮政编码（中国）" value="postcode_cn" />
+                    <el-option label="车牌号（中国）" value="license_plate_cn" />
+                    <el-option label="自定义" value="custom" />
+                  </el-select>
+                </div>
+                <div style="display: flex; gap: 5px; align-items: center;">
+                  <span style="font-size: 12px; color: #606266; white-space: nowrap;">正则:</span>
+                  <el-input 
+                    v-model="scope.row.config.pattern" 
+                    placeholder="输入正则表达式（选择预设会自动填充）"
+                    size="small"
+                    style="flex: 1"
+                    @input="handleRegexPatternInput(scope.row)"
+                  />
+                </div>
               </div>
   
               <!-- 函数配置 -->
               <div v-if="scope.row.ruleType === 'function'" style="display: flex; flex-direction: column; gap: 10px">
-                <div style="display: flex; gap: 10px; align-items: center">
+                <!-- UUID 配置选项（当选择 UUID 时，不显示函数选择器，直接显示 UUID 配置） -->
+                <template v-if="scope.row.config.funcName === 'UUID'">
+                  <div style="display: flex; flex-direction: column; gap: 8px;">
+                    <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+                      <div style="display: flex; gap: 5px; align-items: center;">
+                        <span style="font-size: 12px; color: #606266; white-space: nowrap;">版本:</span>
+                        <el-select 
+                          v-model="scope.row.config.version" 
+                          size="small" 
+                          style="width: 120px"
+                          placeholder="选择版本"
+                        >
+                          <el-option label="V1 (时间戳+MAC)" value="v1" />
+                          <el-option label="V3 (MD5哈希)" value="v3" />
+                          <el-option label="V4 (随机)" value="v4" />
+                          <el-option label="V5 (SHA-1哈希)" value="v5" />
+                        </el-select>
+                      </div>
+                      <el-select 
+                        v-model="scope.row.config.case" 
+                        size="small" 
+                        style="width: 120px"
+                        placeholder="大小写"
+                      >
+                        <el-option label="小写" value="lower" />
+                        <el-option label="大写" value="upper" />
+                        <el-option label="混合" value="mixed" />
+                      </el-select>
+                      <el-checkbox 
+                        v-model="scope.row.config.withHyphen" 
+                        size="small"
+                      >
+                        带连字符(-)
+                      </el-checkbox>
+                    </div>
+                    <div style="font-size: 12px; color: #909399;">
+                      <span v-if="scope.row.config.version === 'v1'">V1: 基于时间戳和 MAC 地址，包含时间信息，36 字符</span>
+                      <span v-else-if="scope.row.config.version === 'v3'">V3: 基于命名空间和名称的 MD5 哈希，确定性生成，36 字符</span>
+                      <span v-else-if="scope.row.config.version === 'v4'">V4: 完全随机生成，36 字符，格式: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx</span>
+                      <span v-else-if="scope.row.config.version === 'v5'">V5: 基于命名空间和名称的 SHA-1 哈希，确定性生成，36 字符</span>
+                      <span v-else>V4: 完全随机生成，36 字符</span>
+                    </div>
+                  </div>
+                </template>
+                <!-- 其他函数配置（当不是 UUID 时，显示函数选择器） -->
+                <template v-else>
                   <el-select 
                     v-model="scope.row.config.funcName" 
                     size="small" 
@@ -853,26 +748,7 @@
                     <el-option label="RAND_INT(min, max)" value="RAND_INT" />
                     <el-option label="CONCAT(...)" value="CONCAT" />
                   </el-select>
-                  <!-- UUID 配置选项 -->
-                  <template v-if="scope.row.config.funcName === 'UUID'">
-                    <el-select 
-                      v-model="scope.row.config.case" 
-                      size="small" 
-                      style="width: 120px"
-                      placeholder="大小写"
-                    >
-                      <el-option label="小写" value="lower" />
-                      <el-option label="大写" value="upper" />
-                      <el-option label="混合" value="mixed" />
-                    </el-select>
-                    <el-checkbox 
-                      v-model="scope.row.config.withHyphen" 
-                      size="small"
-                    >
-                      带连字符(-)
-                    </el-checkbox>
-                  </template>
-                </div>
+                </template>
               </div>
   
               <!-- 模板配置 -->
@@ -884,15 +760,9 @@
               />
   
               <!-- 空值配置 -->
-              <el-slider 
-                v-if="scope.row.ruleType === 'null'"
-                v-model="scope.row.config.probability" 
-                :min="0" 
-                :max="100"
-                :step="1"
-                show-input
-                size="small"
-              />
+              <div v-if="scope.row.ruleType === 'null'" style="display: flex; align-items: center; gap: 8px; padding: 8px; background: #f5f7fa; border-radius: 4px;">
+                <span style="font-size: 12px; color: #606266;">生成 NULL 值</span>
+              </div>
   
               <!-- 引用字段配置 -->
               <div v-if="scope.row.ruleType === 'reference'" style="display: flex; flex-direction: column; gap: 10px">
@@ -1010,15 +880,103 @@
   
               <!-- 外键引用配置 -->
               <div v-if="scope.row.ruleType === 'foreign'" style="display: flex; flex-direction: column; gap: 10px">
+                <!-- 模式（Schema） -->
                 <div style="display: flex; gap: 8px; align-items: center">
-                  <el-input 
-                    v-model="scope.row.config.foreignTable" 
-                    placeholder="外键关联表名"
+                  <span style="width: 80px; font-size: 12px; color: #606266;">模式:</span>
+                  <el-select 
+                    v-model="scope.row.config.foreignDatabase" 
+                    placeholder="选择模式"
                     size="small"
                     style="flex: 1"
-                  />
+                    :loading="foreignDatabasesLoading[scope.row.fieldName]"
+                    @visible-change="(visible) => { if (visible && !foreignDatabases[scope.row.fieldName]?.length) loadForeignDatabases(scope.row.fieldName) }"
+                    @change="onForeignDatabaseChange(scope.row)"
+                  >
+                    <el-option 
+                      v-for="db in foreignDatabases[scope.row.fieldName] || []"
+                      :key="db"
+                      :label="db" 
+                      :value="db" 
+                    />
+                  </el-select>
                 </div>
-                <el-checkbox v-model="scope.row.config.randomSelect" size="small">随机选择</el-checkbox>
+                
+                <!-- 表（Table） -->
+                <div style="display: flex; gap: 8px; align-items: center">
+                  <span style="width: 80px; font-size: 12px; color: #606266;">表:</span>
+                  <el-select 
+                    v-model="scope.row.config.foreignTable" 
+                    placeholder="选择表"
+                    size="small"
+                    style="flex: 1"
+                    :loading="foreignTablesLoading[scope.row.fieldName]"
+                    :disabled="!scope.row.config.foreignDatabase"
+                    @visible-change="(visible) => { if (visible && scope.row.config.foreignDatabase && !foreignTables[scope.row.fieldName]?.length) loadForeignTables(scope.row.fieldName, scope.row.config.foreignDatabase) }"
+                    @change="onForeignTableChange(scope.row)"
+                  >
+                    <el-option 
+                      v-for="table in foreignTables[scope.row.fieldName] || []"
+                      :key="table"
+                      :label="table" 
+                      :value="table" 
+                    />
+                  </el-select>
+                </div>
+                
+                <!-- 字段（Field） -->
+                <div style="display: flex; gap: 8px; align-items: center">
+                  <span style="width: 80px; font-size: 12px; color: #606266;">字段:</span>
+                  <el-select 
+                    v-model="scope.row.config.foreignField" 
+                    placeholder="选择字段"
+                    size="small"
+                    style="flex: 1"
+                    :loading="foreignFieldsLoading[scope.row.fieldName]"
+                    :disabled="!scope.row.config.foreignTable"
+                    @visible-change="(visible) => { if (visible && scope.row.config.foreignDatabase && scope.row.config.foreignTable && !foreignFields[scope.row.fieldName]?.length) loadForeignFields(scope.row.fieldName, scope.row.config.foreignDatabase, scope.row.config.foreignTable) }"
+                  >
+                    <el-option 
+                      v-for="field in foreignFields[scope.row.fieldName] || []"
+                      :key="field.name"
+                      :label="field.name" 
+                      :value="field.name" 
+                    />
+                  </el-select>
+                </div>
+                
+                <!-- 生成模式（Generation Mode） -->
+                <div style="display: flex; flex-direction: column; gap: 8px">
+                  <span style="font-size: 12px; color: #606266; font-weight: 500;">生成模式:</span>
+                  <el-radio-group 
+                    v-model="scope.row.config.generationMode" 
+                    size="small"
+                    @change="onForeignGenerationModeChange(scope.row)"
+                  >
+                    <el-radio label="random">随机</el-radio>
+                    <el-radio label="non_repeating">不重复</el-radio>
+                    <el-radio label="repeat">重复每个值</el-radio>
+                  </el-radio-group>
+                  
+                  <!-- 重复次数配置（仅当选择"重复每个值"时显示） -->
+                  <div v-if="scope.row.config.generationMode === 'repeat'" style="display: flex; gap: 8px; align-items: center; margin-left: 20px;">
+                    <el-input-number 
+                      v-model="scope.row.config.repeatMin" 
+                      :min="1" 
+                      :max="scope.row.config.repeatMax || 100"
+                      size="small"
+                      style="width: 80px"
+                    />
+                    <span style="font-size: 12px; color: #606266;">到</span>
+                    <el-input-number 
+                      v-model="scope.row.config.repeatMax" 
+                      :min="scope.row.config.repeatMin || 1" 
+                      :max="100"
+                      size="small"
+                      style="width: 80px"
+                    />
+                    <span style="font-size: 12px; color: #606266;">次</span>
+                  </div>
+                </div>
               </div>
               
               <!-- 示例值显示（所有规则类型通用） -->
@@ -1028,6 +986,14 @@
                   <span style="color: #606266; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                     {{ fieldExamples.get(scope.row.fieldName) || '-' }}
                   </span>
+                  <!-- 失败状态显示红色叹号 -->
+                  <el-icon 
+                    v-if="fieldExamples.get(scope.row.fieldName) === '生成失败' || fieldExamples.get(scope.row.fieldName) === '配置无效'"
+                    style="color: #F56C6C; font-size: 16px; flex-shrink: 0;"
+                    :title="fieldExamples.get(scope.row.fieldName)"
+                  >
+                    <WarningFilled />
+                  </el-icon>
                   <el-button
                     :icon="Refresh"
                     size="small"
@@ -1116,7 +1082,7 @@
             <el-table-column prop="fieldType" label="字段类型" width="120" />
             <el-table-column prop="ruleType" label="规则类型" width="150">
               <template #default="scope">
-                <el-tag size="small">{{ getRuleTypeLabel(scope.row.ruleType) }}</el-tag>
+                <el-tag size="small">{{ getRuleTypeLabel(scope.row.ruleType, scope.row) }}</el-tag>
               </template>
             </el-table-column>
             <el-table-column label="规则配置" min-width="300">
@@ -1154,7 +1120,7 @@
                   模板: {{ scope.row.config.template || '-' }}
                 </div>
                 <div v-else-if="scope.row.ruleType === 'null'" style="font-size: 12px; color: #606266;">
-                  空值概率: {{ scope.row.config.probability || 0 }}%
+                  生成 NULL 值
                 </div>
                 <div v-else-if="scope.row.ruleType === 'reference'" style="font-size: 12px; color: #606266;">
                   表达式: {{ scope.row.config.expression || '-' }}
@@ -1172,8 +1138,8 @@
                   格式: {{ scope.row.config.format || '-' }}
                 </div>
                 <div v-else-if="scope.row.ruleType === 'foreign'" style="font-size: 12px; color: #606266;">
-                  外键表: {{ scope.row.config.foreignTable || '-' }}, 
-                  {{ scope.row.config.randomSelect ? '随机选择' : '顺序选择' }}
+                  外键: {{ scope.row.config.foreignDatabase || '-' }}/{{ scope.row.config.foreignTable || '-' }}/{{ scope.row.config.foreignField || '-' }}, 
+                  {{ scope.row.config.generationMode === 'random' ? '随机' : scope.row.config.generationMode === 'non_repeating' ? '不重复' : '重复每个值' }}
                 </div>
                 <span v-else style="font-size: 12px; color: #909399;">-</span>
               </template>
@@ -1233,12 +1199,18 @@
             <div v-if="batchRuleType === 'random_string'" style="display: flex; gap: 10px; align-items: center">
               <el-input-number v-model="batchConfig.minLength" placeholder="最小长度" :min="1" :max="1000" style="width: 120px" />
               <el-input-number v-model="batchConfig.maxLength" placeholder="最大长度" :min="1" :max="1000" style="width: 120px" />
-              <el-select v-model="batchConfig.charSet" placeholder="字符集" style="width: 150px">
+              <el-select 
+                v-model="batchConfig.charSet" 
+                multiple
+                collapse-tags
+                collapse-tags-tooltip
+                placeholder="选择字符类型" 
+                style="width: 200px"
+              >
                 <el-option label="字母" value="letters" />
                 <el-option label="数字" value="numbers" />
                 <el-option label="中文" value="chinese" />
                 <el-option label="特殊字符" value="special" />
-                <el-option label="全部" value="all" />
               </el-select>
             </div>
             <div v-else-if="batchRuleType === 'random_number'" style="display: flex; gap: 10px; align-items: center">
@@ -1257,7 +1229,13 @@
               <el-input-number v-model="batchConfig.step" placeholder="步长" :min="1" style="width: 120px" />
               <el-checkbox v-model="batchConfig.cycle">循环</el-checkbox>
             </div>
-            <el-input v-else-if="batchRuleType === 'list'" v-model="batchConfig.valuesText" placeholder="输入值列表，用逗号分隔" />
+            <el-input 
+              v-else-if="batchRuleType === 'list'" 
+              v-model="batchConfig.valuesText" 
+              type="textarea"
+              :rows="6"
+              placeholder="输入值列表，每行一个值"
+            />
             <div v-else-if="batchRuleType === 'regex'" style="display: flex; flex-direction: column; gap: 8px">
               <el-select 
                 v-model="batchConfig.presetPattern" 
@@ -1285,7 +1263,9 @@
               <el-option label="TIMESTAMP" value="TIMESTAMP" />
             </el-select>
             <el-input v-else-if="batchRuleType === 'template'" v-model="batchConfig.template" placeholder="模板，支持 {name}, {date}, {number}, {uuid}" />
-            <el-slider v-else-if="batchRuleType === 'null'" v-model="batchConfig.probability" :min="0" :max="100" :step="1" show-input />
+            <div v-else-if="batchRuleType === 'null'" style="display: flex; align-items: center; gap: 8px; padding: 8px; background: #f5f7fa; border-radius: 4px;">
+              <span style="font-size: 12px; color: #606266;">生成 NULL 值</span>
+            </div>
             <div v-else-if="batchRuleType === 'reference'" style="display: flex; flex-direction: column; gap: 8px">
               <el-input v-model="batchConfig.expression" placeholder="表达式，如 {first_name}_{last_name}" />
               <el-input v-model="batchConfig.fieldsText" placeholder="引用字段，用逗号分隔" />
@@ -1388,6 +1368,14 @@
   const tableSchema = ref(null)
   const fieldRules = ref([])
   const fieldSearchText = ref('')
+  
+  // 外键配置相关数据（按字段名索引）
+  const foreignDatabases = ref({}) // { fieldName: [db1, db2, ...] }
+  const foreignTables = ref({}) // { fieldName: [table1, table2, ...] }
+  const foreignFields = ref({}) // { fieldName: [{name: 'field1', type: 'varchar'}, ...] }
+  const foreignDatabasesLoading = ref({}) // { fieldName: true/false }
+  const foreignTablesLoading = ref({}) // { fieldName: true/false }
+  const foreignFieldsLoading = ref({}) // { fieldName: true/false }
   
   // 基本信息配置折叠状态（空数组表示折叠）
   const showBasicConfig = ref([])
@@ -1625,12 +1613,159 @@
   })
   
   // 监听配置变化，自动保存到缓存（在 setup 阶段注册）
+  // 监听 totalRows 变化，自动更新序列类型字段的 maxValue
+  watch(() => taskConfig.value.totalRows, (newTotalRows) => {
+    if (newTotalRows && newTotalRows > 0) {
+      fieldRules.value.forEach(field => {
+        if (field.ruleType === 'increment' && field.config) {
+          // 如果 maxValue 为 0 或未设置，或者小于新的 totalRows，则更新
+          if (!field.config.maxValue || field.config.maxValue === 0 || field.config.maxValue < newTotalRows) {
+            field.config.maxValue = newTotalRows
+          }
+        }
+      })
+    }
+  })
+  
   watch([fieldRules, taskConfig], () => {
     // 只有在字段规则已初始化后才保存（避免初始化时保存空数据）
     if (fieldRules.value && fieldRules.value.length > 0) {
       saveConfigToCache()
     }
   }, { deep: true })
+  
+  // 加载外键数据库列表
+  const loadForeignDatabases = async (fieldName) => {
+    if (!connectionId.value) {
+      ElMessage.warning('请先选择数据库连接')
+      return
+    }
+    
+    // 如果正在加载，直接返回
+    if (foreignDatabasesLoading.value[fieldName]) {
+      return
+    }
+    
+    foreignDatabasesLoading.value[fieldName] = true
+    try {
+      const response = await api.getDatabases(connectionId.value)
+      const databases = response.databases || []
+      
+      // 处理达梦数据库返回的对象数组格式 {name, username}
+      // 其他数据库返回的是字符串数组
+      const processedDatabases = databases.map(db => {
+        if (typeof db === 'string') {
+          return db
+        } else if (db && typeof db === 'object' && db.name) {
+          return db.name // 达梦数据库格式：使用 name 字段
+        }
+        return String(db)
+      })
+      
+      foreignDatabases.value[fieldName] = processedDatabases
+      
+      // 如果当前字段没有选择数据库，默认使用当前数据库
+      const field = fieldRules.value.find(f => f.fieldName === fieldName)
+      if (field && field.config && !field.config.foreignDatabase && database.value) {
+        field.config.foreignDatabase = database.value
+      }
+    } catch (error) {
+      console.error('加载数据库列表失败:', error)
+      ElMessage.error('加载数据库列表失败: ' + (error.formattedMessage || error.message))
+    } finally {
+      foreignDatabasesLoading.value[fieldName] = false
+    }
+  }
+  
+  // 加载外键表列表
+  const loadForeignTables = async (fieldName, foreignDatabase) => {
+    if (!connectionId.value || !foreignDatabase) {
+      return
+    }
+    
+    foreignTablesLoading.value[fieldName] = true
+    try {
+      const response = await api.getTables(foreignDatabase, connectionId.value)
+      const tables = response.tables || []
+      
+      // 处理可能的对象数组格式（虽然 GetTables 应该返回字符串数组，但为了兼容性还是处理一下）
+      const processedTables = tables.map(table => {
+        if (typeof table === 'string') {
+          return table
+        } else if (table && typeof table === 'object' && table.name) {
+          return table.name
+        }
+        return String(table)
+      })
+      
+      foreignTables.value[fieldName] = processedTables
+    } catch (error) {
+      console.error('加载表列表失败:', error)
+      ElMessage.error('加载表列表失败: ' + (error.formattedMessage || error.message))
+    } finally {
+      foreignTablesLoading.value[fieldName] = false
+    }
+  }
+  
+  // 加载外键字段列表
+  const loadForeignFields = async (fieldName, foreignDatabase, foreignTable) => {
+    if (!connectionId.value || !foreignDatabase || !foreignTable) {
+      return
+    }
+    
+    foreignFieldsLoading.value[fieldName] = true
+    try {
+      const response = await api.getTableSchema(foreignDatabase, foreignTable, connectionId.value)
+      const fields = (response.fields || []).map(f => ({
+        name: f.name || f.Name,
+        type: f.type || f.Type
+      }))
+      foreignFields.value[fieldName] = fields
+    } catch (error) {
+      console.error('加载字段列表失败:', error)
+      ElMessage.error('加载字段列表失败: ' + (error.formattedMessage || error.message))
+    } finally {
+      foreignFieldsLoading.value[fieldName] = false
+    }
+  }
+  
+  // 处理外键数据库选择变化
+  const onForeignDatabaseChange = (field) => {
+    const foreignDatabase = field.config.foreignDatabase
+    if (foreignDatabase) {
+      loadForeignTables(field.fieldName, foreignDatabase)
+      // 清空表和字段选择
+      field.config.foreignTable = ''
+      field.config.foreignField = ''
+      foreignTables.value[field.fieldName] = []
+      foreignFields.value[field.fieldName] = []
+    }
+  }
+  
+  // 处理外键表选择变化
+  const onForeignTableChange = (field) => {
+    const foreignDatabase = field.config.foreignDatabase
+    const foreignTable = field.config.foreignTable
+    if (foreignDatabase && foreignTable) {
+      loadForeignFields(field.fieldName, foreignDatabase, foreignTable)
+      // 清空字段选择
+      field.config.foreignField = ''
+      foreignFields.value[field.fieldName] = []
+    }
+  }
+  
+  // 处理外键生成模式变化
+  const onForeignGenerationModeChange = (field) => {
+    // 如果切换到重复模式，确保有默认的重复次数
+    if (field.config.generationMode === 'repeat') {
+      if (!field.config.repeatMin || field.config.repeatMin <= 0) {
+        field.config.repeatMin = 1
+      }
+      if (!field.config.repeatMax || field.config.repeatMax < field.config.repeatMin) {
+        field.config.repeatMax = field.config.repeatMin || 3
+      }
+    }
+  }
   
   const loadTableSchema = async () => {
     // 如果是编辑模式但还没有表名，等待任务配置加载完成
@@ -1728,12 +1863,20 @@
           GoType: field.go_type || field.GoType,
           fieldType: field.type || field.Type
         }
+        const defaultConfig = getDefaultConfig(fieldWithRuleType)
+        
+        // 如果是序列类型，确保 maxValue 与生成数量一致
+        if (defaultRuleType === 'increment') {
+          const defaultMaxValue = taskConfig.value.totalRows || 1000
+          defaultConfig.maxValue = defaultMaxValue
+        }
+        
         return {
           fieldName: field.name || field.Name,
           fieldType: field.type || field.Type,
           goType: (field.go_type || field.GoType || '').toLowerCase(),
           ruleType: defaultRuleType,
-          config: getDefaultConfig(fieldWithRuleType),
+          config: defaultConfig,
           isPrimaryKey: field.is_primary_key || field.IsPrimaryKey || false,
           isForeignKey: field.is_foreign_key || field.IsForeignKey || false,
           isUnique: field.is_unique || field.IsUnique || false,
@@ -1741,7 +1884,9 @@
           defaultValue: field.default_value || field.DefaultValue,
           maxLength: field.max_length || field.MaxLength || 0,
           precision: field.precision || field.Precision || 0,
-          scale: field.scale || field.Scale || 0
+          scale: field.scale || field.Scale || 0,
+          // 保存外键信息
+          foreignTable: field.foreign_table || field.ForeignTable || ''
         }
       })
       
@@ -1759,15 +1904,16 @@
   }
   
   const getDefaultRuleType = (field) => {
-    if (field.is_primary_key || field.IsPrimaryKey) {
+    // 兼容多种属性命名方式：驼峰命名（isPrimaryKey）和下划线命名（is_primary_key）
+    if (field.isPrimaryKey || field.is_primary_key || field.IsPrimaryKey) {
       // 主键默认使用序列（increment 类型）
       return 'increment'
     }
-    if (field.is_unique || field.IsUnique) {
+    if (field.isUnique || field.is_unique || field.IsUnique) {
       // 唯一约束默认使用 UUID（function 类型）
       return 'function'
     }
-    if (field.is_foreign_key || field.IsForeignKey) {
+    if (field.isForeignKey || field.is_foreign_key || field.IsForeignKey) {
       return 'foreign'
     }
     
@@ -1779,7 +1925,11 @@
       return 'random_number'
     } else if (type.includes('time') || type.includes('date')) {
       return 'random_date'
+    } else if (fieldType.includes('bit')) {
+      // BIT 类型默认使用固定值（0 或 1）
+      return 'fixed'
     } else if (type === 'bool') {
+      // 布尔类型（非 BIT）使用列表选择
       return 'list'
     } else if (fieldType.includes('varchar') || fieldType.includes('char') || (type === 'string' && !fieldType.includes('text'))) {
       // VARCHAR 类型默认使用正则表达式
@@ -1805,7 +1955,41 @@
     } else if (ruleType === 'binary') {
       return { mode: 'generate', width: 100, height: 100, format: 'png', folderPath: '', extensions: [], extensionsText: '', loop: false }
     } else if (ruleType === 'foreign') {
-      return { foreignTable: '', randomSelect: true }
+      return { 
+        foreignDatabase: database.value || '', 
+        foreignTable: '', 
+        foreignField: field.fieldName || field.name || '',
+        generationMode: 'random',
+        repeatMin: 1,
+        repeatMax: 3
+      }
+    } else if (ruleType === 'fixed') {
+      // 固定值：根据字段类型返回合适的默认值
+      const type = (field.go_type || field.GoType || '').toLowerCase()
+      const fieldType = (field.fieldType || field.type || '').toLowerCase()
+      if (fieldType.includes('bit')) {
+        // BIT 类型：默认值为 0
+        return { value: 0 }
+      } else if (type === 'bool' || type.includes('boolean')) {
+        // 布尔类型：默认值为 false
+        return { value: false }
+      } else {
+        // 其他类型：默认值为空字符串
+        return { value: '' }
+      }
+    } else if (ruleType === 'list') {
+      // 列表选择：根据字段类型返回合适的默认值
+      const type = (field.go_type || field.GoType || field.fieldType || '').toLowerCase()
+      if (type === 'bool' || type.includes('boolean') || type.includes('bit')) {
+        // 布尔类型：true, false
+        return { values: [true, false], valuesText: 'true\nfalse', allowRepeat: true, weights: [] }
+      } else if (type.includes('int') || type.includes('float') || type.includes('decimal') || type.includes('numeric')) {
+        // 数字类型：1, 2, 3
+        return { values: [1, 2, 3], valuesText: '1\n2\n3', allowRepeat: true, weights: [] }
+      } else {
+        // 字符串类型或其他：选项1, 选项2, 选项3
+        return { values: ['选项1', '选项2', '选项3'], valuesText: '选项1\n选项2\n选项3', allowRepeat: true, weights: [] }
+      }
     } else if (ruleType === 'regex') {
       // VARCHAR 类型默认使用 [A-Za-z0-9]{10}，但需要检查字段长度限制
       const fieldType = (field.fieldType || field.type || '').toLowerCase()
@@ -1835,16 +2019,49 @@
         precision: 0,
         scale: 0
       }
+    } else if (ruleType === 'random_string') {
+      // 随机文本规则：根据字段类型设置默认配置
+      const fieldType = (field.fieldType || field.type || '').toLowerCase()
+      const isTextType = fieldType.includes('text') || fieldType.includes('clob')
+      
+      if (isTextType) {
+        // TEXT 类型：默认 100-10000 长度的字符串
+        return { 
+          minLength: 100, 
+          maxLength: 10000, 
+          charSet: ['letters', 'numbers', 'chinese', 'special'], // 默认全选
+          fixedLength: 0,
+          case: 'mixed',
+          numberPosition: 'none',
+          prefix: '',
+          suffix: '',
+          customChars: ''
+        }
+      } else {
+        // 其他字符串类型：默认 5-20 长度的字符串
+        return { 
+          minLength: 5, 
+          maxLength: 20, 
+          charSet: ['letters', 'numbers', 'chinese', 'special'], // 默认全选
+          fixedLength: 0,
+          case: 'mixed',
+          numberPosition: 'none',
+          prefix: '',
+          suffix: '',
+          customChars: ''
+        }
+      }
     } else if (ruleType === 'function') {
       // 根据字段类型选择默认函数
       const type = (field.go_type || field.GoType || field.fieldType || '').toLowerCase()
       if (type.includes('time') || type.includes('date') || type.includes('timestamp')) {
         return { funcName: 'NOW', params: [] }
       } else {
-        // UUID 默认配置：大小写混合，带-
+        // UUID 默认配置：版本 v4，大小写混合，带-
         return { 
           funcName: 'UUID', 
           params: [],
+          version: 'v4',
           case: 'mixed',
           withHyphen: true
         }
@@ -1852,7 +2069,7 @@
     } else if (ruleType === 'template') {
       return { template: '' }
     } else if (ruleType === 'null') {
-      return { probability: 0 }
+      return { probability: 1.0 } // 总是生成 NULL
     }
     
     // 根据字段类型返回默认配置
@@ -1901,17 +2118,17 @@
         String(today.getMonth() + 1).padStart(2, '0') + '-' + 
         String(today.getDate()).padStart(2, '0')
       
-      // 判断是否为日期时间类型
-      const fieldType = (field.fieldType || field.type || '').toLowerCase()
-      const isTimestamp = fieldType.includes('timestamp') || fieldType.includes('datetime')
+      // 判断字段类型
+      const isDateOnly = isDateOnlyType(field)
+      const isTimestamp = isTimestampType(field)
       
       return { 
         startDate: '2001-01-01', 
         endDate: todayStr, 
         format: '',
-        fullDay: isTimestamp ? true : false, // 日期时间类型默认一整天
-        startTime: isTimestamp ? '09:00:00' : '', // 日期时间类型默认开始时间
-        endTime: isTimestamp ? '18:00:00' : '', // 日期时间类型默认结束时间
+        fullDay: isTimestamp ? true : false, // 日期时间类型默认一整天，DATE 类型不设置
+        startTime: isTimestamp ? '09:00:00' : '', // 日期时间类型默认开始时间，DATE 类型不设置
+        endTime: isTimestamp ? '18:00:00' : '', // 日期时间类型默认结束时间，DATE 类型不设置
         yearRange: [],
         yearList: [],
         monthRange: [],
@@ -1931,7 +2148,7 @@
         onlyWeekends: false
       }
     } else if (type === 'bool') {
-      return { values: [true, false], valuesText: 'true,false' }
+      return { values: [true, false], valuesText: 'true\nfalse', allowRepeat: true, weights: [] }
     } else {
       // 检查是否为 TEXT 类型
       const fieldType = (field.fieldType || field.type || '').toLowerCase()
@@ -1942,7 +2159,7 @@
         return { 
           minLength: 100, 
           maxLength: 10000, 
-          charSet: 'all',
+          charSet: ['letters', 'numbers', 'chinese', 'special'], // 默认全选
           fixedLength: 0,
           case: 'mixed',
           numberPosition: 'none',
@@ -1955,7 +2172,7 @@
         return { 
           minLength: 5, 
           maxLength: 20, 
-          charSet: 'all',
+          charSet: ['letters', 'numbers', 'chinese', 'special'], // 默认全选
           fixedLength: 0,
           case: 'mixed',
           numberPosition: 'none',
@@ -1970,6 +2187,58 @@
   const onRuleTypeChange = (field) => {
     // 切换规则类型时重置配置
     field.config = getDefaultConfig(field)
+    
+    // 如果是序列类型，确保 maxValue 与生成数量一致
+    if (field.ruleType === 'increment') {
+      const defaultMaxValue = taskConfig.value.totalRows || 1000
+      field.config.maxValue = defaultMaxValue
+    }
+    
+    // 如果是随机文本类型，确保 charSet 是数组且默认全选
+    if (field.ruleType === 'random_string') {
+      if (!field.config.charSet || !Array.isArray(field.config.charSet) || field.config.charSet.length === 0) {
+        field.config.charSet = ['letters', 'numbers', 'chinese', 'special']
+      }
+    }
+    
+    // 如果是外键类型，自动填充外键配置
+    if (field.ruleType === 'foreign') {
+      // 自动填充外键配置
+      if (!field.config.foreignDatabase && database.value) {
+        field.config.foreignDatabase = database.value
+      }
+      
+      // 如果字段有外键信息，自动填充
+      if (field.foreignTable || field.isForeignKey) {
+        const foreignTableName = field.foreignTable || field.ForeignTable || ''
+        if (foreignTableName && !field.config.foreignTable) {
+          field.config.foreignTable = foreignTableName
+        }
+        
+        // 外键字段名通常是当前字段名本身
+        if (!field.config.foreignField) {
+          field.config.foreignField = field.fieldName
+        }
+        
+        // 如果已选择数据库和表，自动加载表列表和字段列表
+        if (field.config.foreignDatabase) {
+          loadForeignDatabases(field.fieldName).then(() => {
+            if (field.config.foreignTable) {
+              loadForeignTables(field.fieldName, field.config.foreignDatabase).then(() => {
+                if (field.config.foreignTable) {
+                  loadForeignFields(field.fieldName, field.config.foreignDatabase, field.config.foreignTable)
+                }
+              })
+            }
+          })
+        } else {
+          loadForeignDatabases(field.fieldName)
+        }
+      } else {
+        // 没有外键信息，只加载数据库列表
+        loadForeignDatabases(field.fieldName)
+      }
+    }
     
     // 如果是 INT 类型且规则是 random_number，强制设置为整数
     if (isIntType(field) && field.ruleType === 'random_number') {
@@ -2485,6 +2754,14 @@
            fieldType.includes('float') || fieldType.includes('double') || fieldType.includes('decimal') || fieldType.includes('numeric')
   }
   
+  // 判断是否为纯日期类型字段（DATE，不包含时间部分）
+  const isDateOnlyType = (field) => {
+    const goType = (field.goType || field.go_type || '').toLowerCase()
+    const fieldType = (field.fieldType || field.field_type || field.type || '').toLowerCase()
+    // 纯日期类型：date（不包含 timestamp, datetime, time）
+    return fieldType === 'date' || (fieldType.includes('date') && !fieldType.includes('timestamp') && !fieldType.includes('datetime') && !fieldType.includes('time'))
+  }
+  
   // 判断是否为日期时间类型字段（TIMESTAMP, DATETIME等，包含时间部分）
   const isTimestampType = (field) => {
     const goType = (field.goType || field.go_type || '').toLowerCase()
@@ -2492,6 +2769,41 @@
     // 日期时间类型：timestamp, datetime, timestamptz
     return fieldType.includes('timestamp') || fieldType.includes('datetime') || 
            goType.includes('time') && !goType.includes('date') && !fieldType.includes('date') && !fieldType.includes('time')
+  }
+  
+  // 格式化日期示例值显示
+  const formatDateExample = (value, field) => {
+    if (!value) return String(value)
+    
+    const valueStr = String(value)
+    // 如果是 ISO 8601 格式（包含 T 和 Z）
+    if (valueStr.includes('T') || valueStr.includes('Z')) {
+      try {
+        const date = new Date(valueStr)
+        if (!isNaN(date.getTime())) {
+          // 判断是否为纯日期类型
+          if (isDateOnlyType(field)) {
+            // DATE 类型：只显示日期部分 YYYY-MM-DD
+            const year = date.getFullYear()
+            const month = String(date.getMonth() + 1).padStart(2, '0')
+            const day = String(date.getDate()).padStart(2, '0')
+            return `${year}-${month}-${day}`
+          } else {
+            // 日期时间类型：显示日期和时间 YYYY-MM-DD HH:mm:ss
+            const year = date.getFullYear()
+            const month = String(date.getMonth() + 1).padStart(2, '0')
+            const day = String(date.getDate()).padStart(2, '0')
+            const hours = String(date.getHours()).padStart(2, '0')
+            const minutes = String(date.getMinutes()).padStart(2, '0')
+            const seconds = String(date.getSeconds()).padStart(2, '0')
+            return `${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+          }
+        }
+      } catch (e) {
+        // 解析失败，返回原值
+      }
+    }
+    return valueStr
   }
   
   // 获取数值类型字段的范围限制
@@ -2580,9 +2892,15 @@
   
     const goType = (field.goType || '').toLowerCase()
     const fieldType = (field.fieldType || '').toLowerCase()
+    const isNullable = field.isNullable !== false // 默认为可空
   
     // 如果是主键或唯一约束，只支持 UUID 和序列
-    if (field.isPrimaryKey || field.isUnique) {
+    // 兼容多种属性命名方式：驼峰命名（isPrimaryKey）和下划线命名（is_primary_key）
+    const isPrimaryKey = field.isPrimaryKey || field.is_primary_key || field.IsPrimaryKey || false
+    const isUnique = field.isUnique || field.is_unique || field.IsUnique || false
+    const isForeignKey = field.isForeignKey || field.is_foreign_key || field.IsForeignKey || false
+    
+    if (isPrimaryKey || isUnique) {
       return [
         { label: 'UUID', value: 'function' },
         { label: '序列', value: 'increment' }
@@ -2590,45 +2908,82 @@
     }
   
     // 如果是外键，只显示外键相关规则
-    if (field.isForeignKey) {
-      return [
+    if (isForeignKey) {
+      const rules = [
         { label: '外键引用', value: 'foreign' },
         { label: '固定值', value: 'fixed' }
       ]
+      // 如果可空，添加 NULL 规则
+      if (isNullable) {
+        rules.push({ label: '空值', value: 'null' })
+      }
+      return rules
     }
   
     // 根据 Go 类型过滤规则（只返回常用规则）
     if (goType.includes('int') || goType.includes('float') || goType.includes('decimal') || goType.includes('numeric')) {
       // 数字类型
-      return [
+      const rules = [
         { label: '随机数字', value: 'random_number' },
         { label: '固定值', value: 'fixed' },
         { label: '序列', value: 'increment' },
         { label: '列表选择', value: 'list' }
       ]
+      // 如果可空，添加 NULL 规则
+      if (isNullable) {
+        rules.push({ label: '空值', value: 'null' })
+      }
+      return rules
     } else if (goType.includes('time') || goType.includes('date')) {
-      // 日期时间类型
-      return [
-        { label: '随机日期', value: 'random_date' },
-        { label: '固定值', value: 'fixed' }
-      ]
+      // 日期时间类型：根据字段类型区分显示
+      const isDateOnly = isDateOnlyType(field)
+      const isTimestamp = isTimestampType(field)
+      const rules = []
+      
+      if (isDateOnly) {
+        // DATE 类型：显示"随机日期"
+        rules.push({ label: '随机日期', value: 'random_date' })
+      } else if (isTimestamp) {
+        // TIMESTAMP/DATETIME 类型：显示"日期时间"
+        rules.push({ label: '日期时间', value: 'random_date' })
+      } else {
+        // 其他日期时间类型：默认显示"随机日期"
+        rules.push({ label: '随机日期', value: 'random_date' })
+      }
+      
+      rules.push({ label: '固定值', value: 'fixed' })
+      // 如果可空，添加 NULL 规则
+      if (isNullable) {
+        rules.push({ label: '空值', value: 'null' })
+      }
+      return rules
     } else if (goType === 'bool' || goType === 'boolean') {
       // 布尔类型
-      return [
+      const rules = [
         { label: '列表选择', value: 'list' },
         { label: '固定值', value: 'fixed' }
       ]
+      // 如果可空，添加 NULL 规则
+      if (isNullable) {
+        rules.push({ label: '空值', value: 'null' })
+      }
+      return rules
     } else if (goType.includes('[]byte') || goType.includes('bytea') || 
                fieldType.includes('blob') || fieldType.includes('binary') || fieldType.includes('bytea')) {
       // 二进制类型（隐藏二进制规则，只保留固定值）
-      return [
+      const rules = [
         { label: '固定值', value: 'fixed' }
       ]
+      // 如果可空，添加 NULL 规则
+      if (isNullable) {
+        rules.push({ label: '空值', value: 'null' })
+      }
+      return rules
     } else {
       // 字符串类型（varchar, char, text 等）
       // 字符串类型可以容纳数值、日期等类型（转换为字符串），所以支持更多规则
       // 只返回常用规则
-      return [
+      const rules = [
         { label: '随机文本', value: 'random_string' },
         { label: '随机数字', value: 'random_number' }, // 可以转换为字符串
         { label: '随机日期', value: 'random_date' }, // 可以转换为字符串
@@ -2637,6 +2992,11 @@
         { label: '列表选择', value: 'list' },
         { label: '正则表达式', value: 'regex' }
       ]
+      // 如果可空，添加 NULL 规则
+      if (isNullable) {
+        rules.push({ label: '空值', value: 'null' })
+      }
+      return rules
     }
   }
   
@@ -2697,10 +3057,30 @@
         // 根据规则类型构建配置（复用createTask中的逻辑）
         switch (field.ruleType) {
           case 'random_string':
+            // 处理字符集：如果是数组，转换为数组；如果是字符串，转换为数组（兼容旧格式）
+            let charSet = field.config.charSet || ['letters', 'numbers', 'chinese', 'special']
+            if (typeof charSet === 'string') {
+              // 兼容旧格式：如果是 'all'，转换为全部字符类型
+              if (charSet === 'all') {
+                charSet = ['letters', 'numbers', 'chinese', 'special']
+              } else {
+                charSet = [charSet]
+              }
+            }
+            // 确保是数组
+            if (!Array.isArray(charSet)) {
+              charSet = ['letters', 'numbers', 'chinese', 'special']
+            }
             rule.config = {
               min_length: field.config.minLength || 10,
               max_length: field.config.maxLength || 50,
-              char_set: field.config.charSet || 'all'
+              char_set: charSet,
+              fixed_length: field.config.fixedLength || 0,
+              case: field.config.case || 'mixed',
+              number_position: field.config.numberPosition || 'none',
+              prefix: field.config.prefix || '',
+              suffix: field.config.suffix || '',
+              custom_chars: field.config.customChars || ''
             }
             break
           case 'random_number':
@@ -2711,30 +3091,31 @@
             }
             break
           case 'random_date':
-            // 将日期格式转换为 ISO 8601 格式（如果只是日期，添加时间部分）
+            // 将日期格式转换为 ISO 8601 格式（DATE 类型不包含时间部分）
             let startDate = field.config.startDate || ''
             let endDate = field.config.endDate || ''
             
-            // 判断是否为日期时间类型
-            const fieldType = (field.fieldType || field.type || '').toLowerCase()
-            const isTimestamp = fieldType.includes('timestamp') || fieldType.includes('datetime')
+            // 判断字段类型
+            const isDateOnly = isDateOnlyType(field)
+            const isTimestamp = isTimestampType(field)
             
-            // 如果日期格式是 YYYY-MM-DD，转换为 ISO 8601
-            if (startDate && startDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            // DATE 类型：只使用日期部分，不添加时间
+            // TIMESTAMP/DATETIME 类型：转换为 ISO 8601 格式
+            if (!isDateOnly && startDate && startDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
               if (isTimestamp && !field.config.fullDay && field.config.startTime) {
                 // 日期时间类型且不是一整天，使用配置的开始时间
                 startDate = startDate + 'T' + field.config.startTime + 'Z'
               } else {
-                // 日期类型或一整天，使用默认时间
+                // 日期时间类型或一整天，使用默认时间
                 startDate = startDate + 'T00:00:00Z'
               }
             }
-            if (endDate && endDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            if (!isDateOnly && endDate && endDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
               if (isTimestamp && !field.config.fullDay && field.config.endTime) {
                 // 日期时间类型且不是一整天，使用配置的结束时间
                 endDate = endDate + 'T' + field.config.endTime + 'Z'
               } else {
-                // 日期类型或一整天，使用默认时间
+                // 日期时间类型或一整天，使用默认时间
                 endDate = endDate + 'T23:59:59Z'
               }
             }
@@ -2752,7 +3133,7 @@
               weekdayList = field.config.weekdayList || []
             }
             
-            // 根据时间配置设置 hourRange
+            // 根据时间配置设置 hourRange（只有日期时间类型才需要）
             let hourRange = []
             if (isTimestamp && !field.config.fullDay && field.config.startTime && field.config.endTime) {
               const startHour = parseInt(field.config.startTime.split(':')[0])
@@ -2776,11 +3157,15 @@
             rule.config = { value: field.config.value || '' }
             break
           case 'increment':
+            // 如果 maxValue 为 0 或未设置，使用生成数量作为默认值
+            const incrementMaxValue = (field.config.maxValue && field.config.maxValue > 0) 
+              ? field.config.maxValue 
+              : (taskConfig.value.totalRows || 1000)
             rule.config = {
               start_value: field.config.startValue || 1,
               step: field.config.step || 1,
               cycle: field.config.cycle || false,
-              max_value: field.config.maxValue || 0,
+              max_value: incrementMaxValue,
               format: field.config.format || '',
               precision: field.config.precision || 0,
               scale: field.config.scale || 0
@@ -2809,6 +3194,7 @@
             }
             // 如果是 UUID，添加配置选项
             if (funcName === 'UUID') {
+              rule.config.version = field.config.version || 'v4'
               rule.config.case = field.config.case || 'mixed'
               rule.config.with_hyphen = field.config.withHyphen !== undefined ? field.config.withHyphen : true
             }
@@ -2818,7 +3204,7 @@
             break
           case 'null':
             rule.config = {
-              probability: (field.config.probability || 0) / 100
+              probability: 1.0 // 总是生成 NULL
             }
             break
           case 'reference':
@@ -2852,6 +3238,33 @@
               loop: field.config.loop || false
             }
             break
+          case 'foreign':
+            // 清理外键配置，移除可能的换行符和空白字符
+            const foreignDatabase = (field.config.foreignDatabase || database.value || '').trim().replace(/\n/g, '').replace(/\t/g, '')
+            const foreignTable = (field.config.foreignTable || field.foreignTable || '').trim().replace(/\n/g, '').replace(/\t/g, '')
+            const foreignField = (field.config.foreignField || field.fieldName || '').trim().replace(/\n/g, '').replace(/\t/g, '')
+            const generationMode = field.config.generationMode || (field.config.randomSelect !== false ? 'random' : 'non_repeating')
+            
+            rule.config = {
+              foreign_database: foreignDatabase,
+              foreign_table: foreignTable,
+              foreign_field: foreignField,
+              generation_mode: generationMode,
+              repeat_min: field.config.repeatMin || 1,
+              repeat_max: field.config.repeatMax || 3
+            }
+            
+            // 向后兼容：如果配置中没有外键表，尝试使用字段信息中的外键表
+            if (!rule.config.foreign_table && field.isForeignKey && field.foreignTable) {
+              rule.config.foreign_table = field.foreignTable.trim().replace(/\n/g, '').replace(/\t/g, '')
+            }
+            break
+        }
+  
+        // 如果是外键规则，确保 foreign_table 字段被设置到规则对象上
+        if (field.ruleType === 'foreign' || field.isForeignKey) {
+          const foreignTable = (rule.config.foreign_table || field.foreignTable || '').trim().replace(/\n/g, '').replace(/\t/g, '')
+          rule.foreign_table = foreignTable
         }
   
         return rule
@@ -2919,6 +3332,194 @@
     previewData.value = []
   }
   
+  // 构建单个字段的配置（用于生成示例值，只包含当前字段）
+  const buildSingleFieldConfig = (field) => {
+    try {
+      // 对于 reference 和 template 规则，可能需要其他字段的值，使用完整配置
+      const needsOtherFields = field.ruleType === 'reference' || field.ruleType === 'template'
+      
+      if (needsOtherFields) {
+        // 需要其他字段，使用完整配置
+        return buildTableConfig()
+      }
+      
+      // 只包含当前字段的简化配置
+      const rule = {
+        field_name: field.fieldName,
+        field_type: field.fieldType,
+        rule_type: field.ruleType,
+        config: {},
+        is_primary_key: field.isPrimaryKey,
+        is_foreign_key: field.isForeignKey,
+        is_unique: field.isUnique,
+        is_nullable: field.isNullable,
+        default_value: field.defaultValue,
+        max_length: field.maxLength || 0,
+        precision: field.precision || 0,
+        scale: field.scale || 0
+      }
+      
+      // 根据规则类型构建配置（复用 buildTableConfig 中的逻辑）
+      switch (field.ruleType) {
+        case 'random_string':
+          // 处理字符集：如果是数组，转换为数组；如果是字符串，转换为数组（兼容旧格式）
+          let charSet2 = field.config.charSet || ['letters', 'numbers', 'chinese', 'special']
+          if (typeof charSet2 === 'string') {
+            // 兼容旧格式：如果是 'all'，转换为全部字符类型
+            if (charSet2 === 'all') {
+              charSet2 = ['letters', 'numbers', 'chinese', 'special']
+            } else {
+              charSet2 = [charSet2]
+            }
+          }
+          // 确保是数组
+          if (!Array.isArray(charSet2)) {
+            charSet2 = ['letters', 'numbers', 'chinese', 'special']
+          }
+          rule.config = {
+            min_length: field.config.minLength || 10,
+            max_length: field.config.maxLength || 50,
+            char_set: charSet2
+          }
+          break
+        case 'random_number':
+          rule.config = {
+            min: field.config.min || 0,
+            max: field.config.max || 1000,
+            is_int: field.config.isInt !== false
+          }
+          break
+        case 'random_date':
+          let startDate = field.config.startDate || ''
+          let endDate = field.config.endDate || ''
+          const isDateOnly = isDateOnlyType(field)
+          const isTimestamp = isTimestampType(field)
+          
+          // DATE 类型：只使用日期部分，不添加时间
+          // TIMESTAMP/DATETIME 类型：转换为 ISO 8601 格式
+          if (!isDateOnly) {
+            if (startDate && startDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              startDate = startDate + 'T00:00:00Z'
+            }
+            if (endDate && endDate.match(/^\d{4}-\d{2}-\d{2}$/)) {
+              endDate = endDate + 'T23:59:59Z'
+            }
+          }
+          
+          let hourRange = []
+          // 只有日期时间类型才需要时间配置
+          if (isTimestamp && !field.config.fullDay) {
+            const startTime = field.config.startTime || '09:00:00'
+            const endTime = field.config.endTime || '18:00:00'
+            const startHour = parseInt(startTime.split(':')[0]) || 9
+            const endHour = parseInt(endTime.split(':')[0]) || 18
+            if (startHour !== endHour) {
+              hourRange = [startHour, endHour]
+            }
+          }
+          let weekdayList = []
+          if (field.config.weekdayMode === 'all') {
+            weekdayList = []
+          } else if (field.config.weekdayMode === 'weekdays') {
+            weekdayList = [1, 2, 3, 4, 5]
+          } else if (field.config.weekdayMode === 'custom') {
+            weekdayList = field.config.weekdayCustom || []
+          } else {
+            weekdayList = field.config.weekdayList || []
+          }
+          rule.config = {
+            start_date: startDate,
+            end_date: endDate,
+            format: field.config.format || '',
+            hour_range: hourRange.length > 0 ? hourRange : undefined,
+            weekday_list: weekdayList,
+            only_weekdays: field.config.onlyWeekdays || false,
+            only_weekends: field.config.onlyWeekends || false
+          }
+          break
+        case 'fixed':
+          rule.config = { value: field.config.value || '' }
+          break
+        case 'increment':
+          const incrementMaxValue = (field.config.maxValue && field.config.maxValue > 0) 
+            ? field.config.maxValue 
+            : (taskConfig.value.totalRows || 1000)
+          rule.config = {
+            start_value: field.config.startValue || 1,
+            step: field.config.step || 1,
+            cycle: field.config.cycle || false,
+            max_value: incrementMaxValue,
+            format: field.config.format || '',
+            precision: field.config.precision || 0,
+            scale: field.config.scale || 0
+          }
+          break
+        case 'list':
+          rule.config = {
+            values: field.config.values || [],
+            allow_repeat: field.config.allowRepeat !== undefined ? field.config.allowRepeat : true,
+            weights: field.config.weights || []
+          }
+          break
+        case 'regex':
+          rule.config = { pattern: field.config.pattern || '' }
+          break
+        case 'function':
+          const funcName = field.config.funcName || 'UUID'
+          rule.config = {
+            func_name: funcName,
+            params: field.config.params || []
+          }
+          if (funcName === 'UUID') {
+            rule.config.case = field.config.case || 'mixed'
+            rule.config.with_hyphen = field.config.withHyphen !== undefined ? field.config.withHyphen : true
+          }
+          break
+        case 'foreign':
+          const foreignDatabase = (field.config.foreignDatabase || database.value || '').trim().replace(/\n/g, '').replace(/\t/g, '')
+          const foreignTable = (field.config.foreignTable || field.foreignTable || '').trim().replace(/\n/g, '').replace(/\t/g, '')
+          const foreignField = (field.config.foreignField || field.fieldName || '').trim().replace(/\n/g, '').replace(/\t/g, '')
+          const generationMode = field.config.generationMode || (field.config.randomSelect !== false ? 'random' : 'non_repeating')
+          
+          rule.config = {
+            foreign_database: foreignDatabase,
+            foreign_table: foreignTable,
+            foreign_field: foreignField,
+            generation_mode: generationMode,
+            repeat_min: field.config.repeatMin || 1,
+            repeat_max: field.config.repeatMax || 3
+          }
+          
+          if (!rule.config.foreign_table && field.isForeignKey && field.foreignTable) {
+            rule.config.foreign_table = field.foreignTable.trim().replace(/\n/g, '').replace(/\t/g, '')
+          }
+          if (field.ruleType === 'foreign' || field.isForeignKey) {
+            rule.foreign_table = rule.config.foreign_table || field.foreignTable || ''
+          }
+          break
+        default:
+          rule.config = {}
+      }
+      
+      // 对于序列规则，生成5条数据以显示序列效果；其他规则只生成1条
+      const isIncrement = rule.rule_type === 'increment'
+      
+      return {
+        table_name: tableName.value,
+        database: database.value,
+        total_rows: isIncrement ? 5 : 1, // 序列规则生成5条，其他规则生成1条
+        batch_size: isIncrement ? 5 : 1,
+        field_rules: [rule],
+        use_transaction: false,
+        on_error: 'skip',
+        retry_times: 0
+      }
+    } catch (error) {
+      console.error('构建单字段配置失败:', error)
+      return null
+    }
+  }
+  
   // 生成单个字段的示例值
   const generateFieldExample = async (field) => {
     if (!field || !field.fieldName) return
@@ -2927,27 +3528,58 @@
     fieldExampleLoading.value.set(field.fieldName, true)
     
     try {
-      // 构建配置（只包含当前字段）
-      const config = buildTableConfig()
+      // 构建配置（只包含当前字段，除非是 reference/template 规则）
+      const config = buildSingleFieldConfig(field)
       if (!config) {
         fieldExamples.value.set(field.fieldName, '配置无效')
         return
       }
   
-      // 调用预览接口，只生成1条数据
-      const response = await api.previewData(connectionId.value, config, 1)
+      // 对于序列规则，生成5条数据以显示序列效果
+      const previewCount = field.ruleType === 'increment' ? 5 : 1
+      
+      // 调用预览接口
+      const response = await api.previewData(connectionId.value, config, previewCount)
       if (response.data && response.data.length > 0) {
-        const exampleValue = response.data[0][field.fieldName]
-        if (exampleValue !== null && exampleValue !== undefined) {
-          // 格式化显示
-          let displayValue = String(exampleValue)
-          // 如果太长，截断
-          if (displayValue.length > 50) {
-            displayValue = displayValue.substring(0, 50) + '...'
+        // 对于序列规则，格式化为 "1, 2, 3, 4, 5, ..." 的格式
+        if (field.ruleType === 'increment' && response.data.length > 0) {
+          const values = response.data.map(row => {
+            const value = row[field.fieldName]
+            if (value !== null && value !== undefined) {
+              return String(value)
+            }
+            return ''
+          }).filter(v => v !== '')
+          
+          if (values.length > 0) {
+            fieldExamples.value.set(field.fieldName, values.join(', ') + ', ...')
+          } else {
+            fieldExamples.value.set(field.fieldName, '生成失败')
           }
-          fieldExamples.value.set(field.fieldName, displayValue)
         } else {
-          fieldExamples.value.set(field.fieldName, '(空)')
+          // 其他规则类型，只显示第一条数据
+          const exampleValue = response.data[0][field.fieldName]
+          if (exampleValue !== null && exampleValue !== undefined) {
+            // 格式化显示
+            let displayValue = String(exampleValue)
+            
+            // 如果是日期类型，格式化日期显示
+            const fieldType = (field.fieldType || field.type || '').toLowerCase()
+            const goType = (field.goType || field.GoType || '').toLowerCase()
+            if (fieldType.includes('date') || fieldType.includes('time') || goType.includes('time') || goType.includes('date')) {
+              displayValue = formatDateExample(exampleValue, field)
+            } else {
+              displayValue = String(exampleValue)
+            }
+            
+            // 如果太长，截断
+            if (displayValue.length > 50) {
+              displayValue = displayValue.substring(0, 50) + '...'
+            }
+            fieldExamples.value.set(field.fieldName, displayValue)
+          } else {
+            fieldExamples.value.set(field.fieldName, '(空)')
+          }
         }
       } else {
         fieldExamples.value.set(field.fieldName, '生成失败')
@@ -3006,10 +3638,30 @@
         // 根据规则类型构建配置（复用 createTask 中的逻辑）
         switch (field.ruleType) {
           case 'random_string':
+            // 处理字符集：如果是数组，转换为数组；如果是字符串，转换为数组（兼容旧格式）
+            let charSet = field.config.charSet || ['letters', 'numbers', 'chinese', 'special']
+            if (typeof charSet === 'string') {
+              // 兼容旧格式：如果是 'all'，转换为全部字符类型
+              if (charSet === 'all') {
+                charSet = ['letters', 'numbers', 'chinese', 'special']
+              } else {
+                charSet = [charSet]
+              }
+            }
+            // 确保是数组
+            if (!Array.isArray(charSet)) {
+              charSet = ['letters', 'numbers', 'chinese', 'special']
+            }
             rule.config = {
               min_length: field.config.minLength || 10,
               max_length: field.config.maxLength || 50,
-              char_set: field.config.charSet || 'all'
+              char_set: charSet,
+              fixed_length: field.config.fixedLength || 0,
+              case: field.config.case || 'mixed',
+              number_position: field.config.numberPosition || 'none',
+              prefix: field.config.prefix || '',
+              suffix: field.config.suffix || '',
+              custom_chars: field.config.customChars || ''
             }
             break
           case 'random_number':
@@ -3058,11 +3710,15 @@
             rule.config = { value: field.config.value || '' }
             break
           case 'increment':
+            // 如果 maxValue 为 0 或未设置，使用生成数量作为默认值
+            const templateIncrementMaxValue = (field.config.maxValue && field.config.maxValue > 0) 
+              ? field.config.maxValue 
+              : (taskConfig.value.totalRows || 1000)
             rule.config = {
               start_value: field.config.startValue || 1,
               step: field.config.step || 1,
               cycle: field.config.cycle || false,
-              max_value: field.config.maxValue || 0,
+              max_value: templateIncrementMaxValue,
               format: field.config.format || '',
               precision: field.config.precision || 0,
               scale: field.config.scale || 0
@@ -3091,6 +3747,7 @@
             }
             // 如果是 UUID，添加配置选项
             if (funcName === 'UUID') {
+              rule.config.version = field.config.version || 'v4'
               rule.config.case = field.config.case || 'mixed'
               rule.config.with_hyphen = field.config.withHyphen !== undefined ? field.config.withHyphen : true
             }
@@ -3100,7 +3757,7 @@
             break
           case 'null':
             rule.config = {
-              probability: (field.config.probability || 0) / 100
+              probability: 1.0 // 总是生成 NULL
             }
             break
           case 'reference':
@@ -3207,10 +3864,30 @@
         const ruleConfig = rule.config || {}
         switch (rule.rule_type) {
           case 'random_string':
+            // 处理字符集：如果是数组，直接使用；如果是字符串，转换为数组（兼容旧格式）
+            let charSet = ruleConfig.char_set || ['letters', 'numbers', 'chinese', 'special']
+            if (typeof charSet === 'string') {
+              // 兼容旧格式：如果是 'all'，转换为全部字符类型
+              if (charSet === 'all') {
+                charSet = ['letters', 'numbers', 'chinese', 'special']
+              } else {
+                charSet = [charSet]
+              }
+            }
+            // 确保是数组
+            if (!Array.isArray(charSet)) {
+              charSet = ['letters', 'numbers', 'chinese', 'special']
+            }
             fieldRule.config = {
               minLength: ruleConfig.min_length || 10,
               maxLength: ruleConfig.max_length || 50,
-              charSet: ruleConfig.char_set || 'all'
+              charSet: charSet,
+              fixedLength: ruleConfig.fixed_length || 0,
+              case: ruleConfig.case || 'mixed',
+              numberPosition: ruleConfig.number_position || 'none',
+              prefix: ruleConfig.prefix || '',
+              suffix: ruleConfig.suffix || '',
+              customChars: ruleConfig.custom_chars || ''
             }
             break
           case 'random_number':
@@ -3341,6 +4018,7 @@
             }
             // 如果是 UUID，恢复配置选项
             if (fieldRule.config.funcName === 'UUID') {
+              fieldRule.config.version = ruleConfig.version || 'v4'
               fieldRule.config.case = ruleConfig.case || 'mixed'
               fieldRule.config.withHyphen = ruleConfig.with_hyphen !== undefined ? ruleConfig.with_hyphen : true
             }
@@ -3350,7 +4028,7 @@
             break
           case 'null':
             fieldRule.config = {
-              probability: (ruleConfig.probability || 0) * 100
+              probability: 100 // 总是生成 NULL（前端显示用，实际后端使用 1.0）
             }
             break
           case 'reference':
@@ -3439,10 +4117,30 @@
         // 根据规则类型转换配置
         switch (rule.rule_type) {
           case 'random_string':
+            // 处理字符集：如果是数组，直接使用；如果是字符串，转换为数组（兼容旧格式）
+            let charSet3 = ruleConfig.char_set || ['letters', 'numbers', 'chinese', 'special']
+            if (typeof charSet3 === 'string') {
+              // 兼容旧格式：如果是 'all'，转换为全部字符类型
+              if (charSet3 === 'all') {
+                charSet3 = ['letters', 'numbers', 'chinese', 'special']
+              } else {
+                charSet3 = [charSet3]
+              }
+            }
+            // 确保是数组
+            if (!Array.isArray(charSet3)) {
+              charSet3 = ['letters', 'numbers', 'chinese', 'special']
+            }
             fieldRule.config = {
-              minLength: ruleConfig.min_length,
-              maxLength: ruleConfig.max_length,
-              charSet: ruleConfig.char_set || 'all'
+              minLength: ruleConfig.min_length || 10,
+              maxLength: ruleConfig.max_length || 50,
+              charSet: charSet3,
+              fixedLength: ruleConfig.fixed_length || 0,
+              case: ruleConfig.case || 'mixed',
+              numberPosition: ruleConfig.number_position || 'none',
+              prefix: ruleConfig.prefix || '',
+              suffix: ruleConfig.suffix || '',
+              customChars: ruleConfig.custom_chars || ''
             }
             break
           case 'random_number':
@@ -3507,6 +4205,7 @@
             }
             // 如果是 UUID，恢复配置选项
             if (fieldRule.config.funcName === 'UUID') {
+              fieldRule.config.version = ruleConfig.version || 'v4'
               fieldRule.config.case = ruleConfig.case || 'mixed'
               fieldRule.config.withHyphen = ruleConfig.with_hyphen !== undefined ? ruleConfig.with_hyphen : true
             }
@@ -3516,7 +4215,7 @@
             break
           case 'null':
             fieldRule.config = {
-              probability: (ruleConfig.probability || 0) * 100
+              probability: 100 // 总是生成 NULL（前端显示用，实际后端使用 1.0）
             }
             break
           case 'reference':
@@ -3551,9 +4250,32 @@
             }
             break
           case 'foreign':
+            // 向后兼容：如果配置中有 random_select，转换为 generation_mode
+            let generationMode = ruleConfig.generation_mode || 'random'
+            if (!ruleConfig.generation_mode && ruleConfig.random_select !== undefined) {
+              generationMode = ruleConfig.random_select !== false ? 'random' : 'non_repeating'
+            }
+            
             fieldRule.config = {
+              foreignDatabase: ruleConfig.foreign_database || database.value || '',
               foreignTable: ruleConfig.foreign_table || '',
-              randomSelect: ruleConfig.random_select !== false
+              foreignField: ruleConfig.foreign_field || fieldRule.fieldName || '',
+              generationMode: generationMode,
+              repeatMin: ruleConfig.repeat_min || 1,
+              repeatMax: ruleConfig.repeat_max || 3,
+              // 向后兼容
+              randomSelect: generationMode === 'random'
+            }
+            
+            // 如果配置了外键，自动加载相关数据
+            if (fieldRule.config.foreignDatabase) {
+              loadForeignDatabases(fieldRule.fieldName)
+              if (fieldRule.config.foreignTable) {
+                loadForeignTables(fieldRule.fieldName, fieldRule.config.foreignDatabase)
+                if (fieldRule.config.foreignField) {
+                  loadForeignFields(fieldRule.fieldName, fieldRule.config.foreignDatabase, fieldRule.config.foreignTable)
+                }
+              }
             }
             break
           default:
@@ -3573,11 +4295,11 @@
   }
   
   // 获取规则类型标签
-  const getRuleTypeLabel = (ruleType) => {
+  const getRuleTypeLabel = (ruleType, field = null) => {
     const labels = {
       'random_string': '随机文本',
       'random_number': '随机数字',
-      'random_date': '随机日期',
+      'random_date': '随机日期', // 默认标签，会根据字段类型动态调整
       'fixed': '固定值',
       'increment': '递增',
       'list': '列表选择',
@@ -3591,6 +4313,16 @@
       'binary': '二进制/图片',
       'foreign': '外键引用'
     }
+    
+    // 如果是 random_date 规则，根据字段类型返回不同的标签
+    if (ruleType === 'random_date' && field) {
+      if (isTimestampType(field)) {
+        return '日期时间'
+      } else if (isDateOnlyType(field)) {
+        return '随机日期'
+      }
+    }
+    
     return labels[ruleType] || ruleType
   }
   
@@ -3603,6 +4335,17 @@
       'special': '特殊字符',
       'all': '全部'
     }
+    // 如果是数组，转换为标签文本
+    if (Array.isArray(charSet)) {
+      if (charSet.length === 0) {
+        return '未选择'
+      }
+      if (charSet.length === 4) {
+        return '全部'
+      }
+      return charSet.map(c => labels[c] || c).join('、')
+    }
+    // 兼容旧格式（字符串）
     return labels[charSet] || charSet
   }
   
@@ -3612,7 +4355,7 @@
     // random_string
     minLength: 10,
     maxLength: 50,
-    charSet: 'all',
+    charSet: ['letters', 'numbers', 'chinese', 'special'], // 默认全选
     // random_number
     min: 0,
     max: 1000,
@@ -3637,7 +4380,7 @@
     // template
     template: '',
     // null
-    probability: 0,
+    probability: 100, // 空值规则：总是生成 NULL
     // reference
     expression: '',
     fieldsText: '',
@@ -3709,14 +4452,22 @@
       return []
     }
   
+    // 检查所有字段是否都可空（所有字段都可空时才显示 NULL 规则）
+    const allNullable = selectedFieldObjects.every(f => f.isNullable !== false)
+  
     // 检查是否有外键字段
     const hasForeignKey = selectedFieldObjects.some(f => f.isForeignKey)
     if (hasForeignKey) {
       // 如果选中的字段中有外键，只显示外键相关规则
-      return [
+      const rules = [
         { label: '外键引用', value: 'foreign' },
         { label: '固定值', value: 'fixed' }
       ]
+      // 如果所有字段都可空，添加 NULL 规则
+      if (allNullable) {
+        rules.push({ label: '空值', value: 'null' })
+      }
+      return rules
     }
   
     // 收集所有字段类型
@@ -3742,34 +4493,38 @@
     // 如果只有一种类型，返回该类型的规则
     if (fieldTypes.size === 1) {
       const type = Array.from(fieldTypes)[0]
+      let rules = []
       switch (type) {
         case 'number':
-          return [
+          rules = [
             { label: '随机数字', value: 'random_number' },
             { label: '固定值', value: 'fixed' },
             { label: '序列', value: 'increment' },
             { label: '列表选择', value: 'list' }
           ]
+          break
         case 'datetime':
-          return [
+          rules = [
             { label: '随机日期', value: 'random_date' },
             { label: '固定值', value: 'fixed' }
           ]
+          break
         case 'bool':
-          return [
+          rules = [
             { label: '列表选择', value: 'list' },
             { label: '固定值', value: 'fixed' }
           ]
+          break
         case 'binary':
-          return [
+          rules = [
             { label: '固定值', value: 'fixed' }
           ]
+          break
         case 'string':
         default:
           // 字符串类型可以容纳数值、日期等类型（转换为字符串），所以支持更多规则
-          // 只返回常用规则
-          return [
-            { label: '随机文本', value: 'random_string' },
+          // 只返回常用规则（隐藏 random_string）
+          rules = [
             { label: '随机数字', value: 'random_number' }, // 可以转换为字符串
             { label: '随机日期', value: 'random_date' }, // 可以转换为字符串
             { label: '固定值', value: 'fixed' },
@@ -3777,15 +4532,26 @@
             { label: '列表选择', value: 'list' },
             { label: '正则表达式', value: 'regex' }
           ]
+          break
       }
+      // 如果所有字段都可空，添加 NULL 规则
+      if (allNullable) {
+        rules.push({ label: '空值', value: 'null' })
+      }
+      return rules
     }
   
     // 如果混合类型，返回所有字段都支持的通用规则
     // 注意：这种情况应该被 hasMixedFieldTypes() 检测到并阻止应用
     // 只返回常用规则
-    return [
+    const rules = [
       { label: '固定值', value: 'fixed' }
     ]
+    // 如果所有字段都可空，添加 NULL 规则
+    if (allNullable) {
+      rules.push({ label: '空值', value: 'null' })
+    }
+    return rules
   }
   
   // 处理正则表达式输入
@@ -3882,7 +4648,8 @@
             case 'random_string':
               field.config.minLength = config.minLength
               field.config.maxLength = config.maxLength
-              field.config.charSet = config.charSet || 'all'
+              // 确保 charSet 是数组
+              field.config.charSet = Array.isArray(config.charSet) ? config.charSet : ['letters', 'numbers', 'chinese', 'special']
               break
             case 'random_number':
               field.config.min = config.min
@@ -3908,8 +4675,19 @@
               break
             case 'list':
               if (config.valuesText) {
-                field.config.values = config.valuesText.split(',').map(v => v.trim()).filter(v => v)
-                field.config.valuesText = config.valuesText
+                // 使用换行符分割，兼容逗号分隔（向后兼容）
+                if (config.valuesText.includes('\n')) {
+                  field.config.values = config.valuesText.split('\n').map(v => v.trim()).filter(v => v.length > 0)
+                } else {
+                  // 兼容旧格式：逗号分隔
+                  field.config.values = config.valuesText.split(',').map(v => v.trim()).filter(v => v.length > 0)
+                }
+                // 统一转换为换行符分隔的格式
+                field.config.valuesText = field.config.values.join('\n')
+              } else if (config.values && Array.isArray(config.values)) {
+                // 如果只有 values 数组，转换为 valuesText
+                field.config.values = config.values
+                field.config.valuesText = config.values.join('\n')
               }
               field.config.allowRepeat = config.allowRepeat !== undefined ? config.allowRepeat : true
               if (config.weightsText) {
@@ -3939,7 +4717,7 @@
               field.config.template = config.template || ''
               break
             case 'null':
-              field.config.probability = (config.probability || 0) / 100
+              field.config.probability = 100 // 空值规则：总是生成 NULL（前端显示用）
               break
             case 'reference':
               field.config.expression = config.expression || ''
@@ -3974,8 +4752,14 @@
               }
               break
             case 'foreign':
+              field.config.foreignDatabase = config.foreignDatabase || database.value || ''
               field.config.foreignTable = config.foreignTable || ''
-              field.config.randomSelect = config.randomSelect !== false
+              field.config.foreignField = config.foreignField || field.fieldName || ''
+              field.config.generationMode = config.generationMode || 'random'
+              field.config.repeatMin = config.repeatMin || 1
+              field.config.repeatMax = config.repeatMax || 3
+              // 向后兼容
+              field.config.randomSelect = field.config.generationMode === 'random'
               break
           }
         }
@@ -3989,7 +4773,7 @@
       batchConfig.value = {
         minLength: 10,
         maxLength: 50,
-        charSet: 'all',
+        charSet: ['letters', 'numbers', 'chinese', 'special'], // 默认全选
         min: 0,
         max: 1000,
         isInt: true,
@@ -4005,7 +4789,7 @@
         pattern: '',
         funcName: 'UUID',
         template: '',
-        probability: 0,
+        probability: 100, // 空值规则：总是生成 NULL
         expression: '',
         fieldsText: '',
         geoType: 'city',
@@ -4030,9 +4814,26 @@
   
   const resetAllRules = () => {
     fieldRules.value.forEach(field => {
-      field.ruleType = getDefaultRuleType(field)
-      field.config = getDefaultConfig(field)
+      // 重置规则类型
+      const defaultRuleType = getDefaultRuleType(field)
+      // 检查默认规则类型是否在可用规则列表中
+      const availableRules = getAvailableRules(field)
+      const ruleExists = availableRules.find(r => r.value === defaultRuleType)
+      
+      if (ruleExists) {
+        field.ruleType = defaultRuleType
+      } else {
+        // 如果默认规则类型不在可用规则列表中，使用第一个可用规则
+        field.ruleType = availableRules.length > 0 ? availableRules[0].value : defaultRuleType
+      }
+      
+      // 使用 onRuleTypeChange 来确保配置正确应用（包括序列规则的 maxValue、随机文本规则的 charSet 等）
+      onRuleTypeChange(field)
     })
+    // 重新生成所有字段的示例值
+    setTimeout(() => {
+      generateAllFieldExamples()
+    }, 100)
     ElMessage.success('已重置所有字段规则')
   }
   
@@ -4063,6 +4864,13 @@
   <style scoped>
   .el-table {
     margin-top: 20px;
+  }
+  /* 移除序列规则高级配置底部的白条 */
+  :deep(.increment-collapse .el-collapse-item__wrap) {
+    border-bottom: none !important;
+  }
+  :deep(.increment-collapse-item .el-collapse-item__content) {
+    padding-bottom: 0 !important;
   }
   </style>
   

@@ -33,15 +33,15 @@ type TableConfig struct {
 
 // StringRandomConfig 字符串随机配置
 type StringRandomConfig struct {
-	MinLength      int    `json:"min_length"`      // 最小长度
-	MaxLength      int    `json:"max_length"`      // 最大长度
-	FixedLength    int    `json:"fixed_length"`    // 固定长度（可选，如果设置则忽略min/max）
-	CharSet        string `json:"char_set"`        // 字符集：letters/numbers/chinese/special/all
-	CustomChars    string `json:"custom_chars"`    // 自定义字符集
-	Prefix         string `json:"prefix"`          // 前缀
-	Suffix         string `json:"suffix"`          // 后缀
-	Case           string `json:"case"`            // 大小写：lower（小写）/upper（大写）/mixed（混合，默认）
-	NumberPosition string `json:"number_position"` // 数字位置：none（无数字）/start（开头）/end（结尾）/random（随机）
+	MinLength      int      `json:"min_length"`      // 最小长度
+	MaxLength      int      `json:"max_length"`      // 最大长度
+	FixedLength    int      `json:"fixed_length"`    // 固定长度（可选，如果设置则忽略min/max）
+	CharSet        []string `json:"char_set"`        // 字符集数组：letters/numbers/chinese/special（支持多选）
+	CustomChars    string   `json:"custom_chars"`    // 自定义字符集
+	Prefix         string   `json:"prefix"`          // 前缀
+	Suffix         string   `json:"suffix"`          // 后缀
+	Case           string   `json:"case"`            // 大小写：lower（小写）/upper（大写）/mixed（混合，默认）
+	NumberPosition string   `json:"number_position"` // 数字位置：none（无数字）/start（开头）/end（结尾）/random（随机）
 }
 
 // NumberRandomConfig 数字随机配置
@@ -115,6 +115,7 @@ type FunctionConfig struct {
 	Params     []interface{} `json:"params"`      // 函数参数
 	Case       string        `json:"case"`        // UUID 大小写：lower/upper/mixed（仅用于 UUID）
 	WithHyphen bool          `json:"with_hyphen"` // UUID 是否带连字符（仅用于 UUID）
+	Version    string        `json:"version"`     // UUID 版本：v1/v3/v4/v5（仅用于 UUID，默认 v4）
 }
 
 // NullConfig 空值配置
@@ -132,9 +133,14 @@ type FileConfig struct {
 
 // ForeignKeyConfig 外键配置
 type ForeignKeyConfig struct {
-	ForeignTable string `json:"foreign_table"` // 关联表名
-	ForeignField string `json:"foreign_field"` // 关联字段名
-	RandomSelect bool   `json:"random_select"` // 是否随机选择
+	ForeignDatabase string `json:"foreign_database"` // 关联数据库/模式名
+	ForeignTable    string `json:"foreign_table"`    // 关联表名
+	ForeignField    string `json:"foreign_field"`    // 关联字段名
+	GenerationMode  string `json:"generation_mode"`  // 生成模式：random（随机）/non_repeating（不重复）/repeat（重复每个值）
+	RepeatMin       int    `json:"repeat_min"`       // 重复最小值（仅用于 repeat 模式）
+	RepeatMax       int    `json:"repeat_max"`       // 重复最大值（仅用于 repeat 模式）
+	// 向后兼容：如果 generation_mode 为空，使用 random_select
+	RandomSelect bool `json:"random_select,omitempty"` // 是否随机选择（已废弃，使用 generation_mode）
 }
 
 // TemplateConfig 模板配置

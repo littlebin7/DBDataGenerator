@@ -33,9 +33,54 @@ type RuleGenerator interface {
 type RandomStringGenerator struct{}
 
 func (g *RandomStringGenerator) Generate(rule *FieldRule, index int64) (interface{}, error) {
+	// 先检查原始配置中的 char_set，处理向后兼容
+	var charSetTypes []string
+	if ruleConfig, ok := rule.Config.(map[string]interface{}); ok {
+		if charSetRaw, exists := ruleConfig["char_set"]; exists {
+			switch v := charSetRaw.(type) {
+			case []interface{}:
+				// 新格式：数组
+				charSetTypes = make([]string, 0, len(v))
+				for _, item := range v {
+					if str, ok := item.(string); ok {
+						charSetTypes = append(charSetTypes, str)
+					}
+				}
+			case []string:
+				// 新格式：字符串数组
+				charSetTypes = v
+			case string:
+				// 旧格式：字符串，转换为数组
+				if v == "all" {
+					charSetTypes = []string{"letters", "numbers", "chinese", "special"}
+				} else {
+					charSetTypes = []string{v}
+				}
+				// 更新原始配置为数组格式，以便后续解析
+				ruleConfig["char_set"] = charSetTypes
+			}
+		}
+	}
+
+	// 如果仍然为空，使用默认值
+	if len(charSetTypes) == 0 {
+		charSetTypes = []string{"letters", "numbers", "chinese", "special"} // 默认全选
+		// 更新原始配置
+		if ruleConfig, ok := rule.Config.(map[string]interface{}); ok {
+			ruleConfig["char_set"] = charSetTypes
+		}
+	}
+
 	var config StringRandomConfig
 	if err := unmarshalConfig(rule.Config, &config); err != nil {
 		return nil, err
+	}
+
+	// 确保 config.CharSet 有值（如果解析后为空，使用我们处理过的值）
+	if len(config.CharSet) == 0 {
+		config.CharSet = charSetTypes
+	} else {
+		charSetTypes = config.CharSet
 	}
 
 	// 如果设置了固定长度，使用固定长度
@@ -57,24 +102,49 @@ func (g *RandomStringGenerator) Generate(rule *FieldRule, index int64) (interfac
 		length = minLen + rand.Intn(maxLen-minLen+1)
 	}
 
-	// 选择字符集
+	// 选择字符集（支持多选）
 	var charSet string
-	switch config.CharSet {
-	case "letters":
-		charSet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	case "numbers":
-		charSet = "0123456789"
-	case "chinese":
-		// 简单的中文字符范围
-		charSet = "的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经十三之进着等部度家电力里如水化高自二理起小物现实加量都两体制机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形相全表间样与关各重新线内数正心反你明看原又么利比或但质气第向道命此变条只没结解问意建月公无系军很情者最立代想已通并提直题党程展五果料象员革位入常文总次品式活设及管特件长求老头基资边流路级少图山统接知较将组见计别她手角期根论运农指几九区强放决西被干做必战先回则任取据处队南给色光门即保治北造百规热领七海口东导器压志世金增争济阶油思术极交受联什认六共权收证改清己美再采转更单风切打白教速花带安场身车例真务具万每目至达走积示议声报斗完类八离华名确才科张信马节话米整空元况今集温传土许步群广石记需段研界拉林律叫且究观越织装影算低持音众书布复容儿须际商非验连断深难近矿千周委素技备半办青省列习响约支般史感劳便团往酸历市克何除消构府称太准精值号率族维划选标写存候毛亲快效斯院查江型眼王按格养易置派层片始却专状育厂京识适属圆包火住调满县局照参红细引听该铁价严龙飞"
-	case "special":
-		charSet = "!@#$%^&*()_+-=[]{}|;:,.<>?"
-	case "all":
-		charSet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+-=[]{}|;:,.<>?"
-	default:
+
+	// 定义各字符类型的字符集
+	charSetMap := map[string]string{
+		"letters": "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ",
+		"numbers": "0123456789",
+		"chinese": "的一是在不了有和人这中大为上个国我以要他时来用们生到作地于出就分对成会可主发年动同工也能下过子说产种面而方后多定行学法所民得经十三之进着等部度家电力里如水化高自二理起小物现实加量都两体制机当使点从业本去把性好应开它合还因由其些然前外天政四日那社义事平形相全表间样与关各重新线内数正心反你明看原又么利比或但质气第向道命此变条只没结解问意建月公无系军很情者最立代想已通并提直题党程展五果料象员革位入常文总次品式活设及管特件长求老头基资边流路级少图山统接知较将组见计别她手角期根论运农指几九区强放决西被干做必战先回则任取据处队南给色光门即保治北造百规热领七海口东导器压志世金增争济阶油思术极交受联什认六共权收证改清己美再采转更单风切打白教速花带安场身车例真务具万每目至达走积示议声报斗完类八离华名确才科张信马节话米整空元况今集温传土许步群广石记需段研界拉林律叫且究观越织装影算低持音众书布复容儿须际商非验连断深难近矿千周委素技备半办青省列习响约支般史感劳便团往酸历市克何除消构府称太准精值号率族维划选标写存候毛亲快效斯院查江型眼王按格养易置派层片始却专状育厂京识适属圆包火住调满县局照参红细引听该铁价严龙飞",
+		"special": "!@#$%^&*()_+-=[]{}|;:,.<>?",
+	}
+
+	// 使用 config.CharSet（已经处理过向后兼容）
+	charSetTypes = config.CharSet
+
+	// 合并多个字符集
+	charSetBuilder := strings.Builder{}
+	charSetMapUsed := make(map[string]bool) // 用于去重
+
+	for _, charType := range charSetTypes {
+		// 处理向后兼容：如果是 "all"，转换为所有类型
+		if charType == "all" {
+			for k, v := range charSetMap {
+				if !charSetMapUsed[k] {
+					charSetBuilder.WriteString(v)
+					charSetMapUsed[k] = true
+				}
+			}
+		} else if charset, exists := charSetMap[charType]; exists {
+			if !charSetMapUsed[charType] {
+				charSetBuilder.WriteString(charset)
+				charSetMapUsed[charType] = true
+			}
+		}
+	}
+
+	charSet = charSetBuilder.String()
+
+	// 如果合并后的字符集为空，使用默认值
+	if charSet == "" {
 		if config.CustomChars != "" {
 			charSet = config.CustomChars
 		} else {
+			// 默认：字母+数字
 			charSet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 		}
 	}
@@ -86,22 +156,31 @@ func (g *RandomStringGenerator) Generate(rule *FieldRule, index int64) (interfac
 	}
 
 	// 生成随机字符串
-	result := make([]byte, length)
+	// 将字符集转换为 rune 切片，以正确处理多字节字符（如中文）
+	charSetRunes := []rune(charSet)
 	numberChars := "0123456789"
+	numberCharsRunes := []rune(numberChars)
+
+	result := make([]rune, length)
 
 	for i := range result {
 		if numberPosition == "start" && i == 0 {
 			// 开头必须是数字
-			result[i] = numberChars[rand.Intn(len(numberChars))]
+			result[i] = numberCharsRunes[rand.Intn(len(numberCharsRunes))]
 		} else if numberPosition == "end" && i == length-1 {
 			// 结尾必须是数字
-			result[i] = numberChars[rand.Intn(len(numberChars))]
-		} else if numberPosition == "random" && rand.Float64() < 0.3 && len(numberChars) > 0 {
+			result[i] = numberCharsRunes[rand.Intn(len(numberCharsRunes))]
+		} else if numberPosition == "random" && rand.Float64() < 0.3 && len(numberCharsRunes) > 0 {
 			// 30%概率是数字
-			result[i] = numberChars[rand.Intn(len(numberChars))]
+			result[i] = numberCharsRunes[rand.Intn(len(numberCharsRunes))]
 		} else {
-			// 使用完整字符集
-			result[i] = charSet[rand.Intn(len(charSet))]
+			// 使用完整字符集（按 rune 索引，正确处理多字节字符）
+			if len(charSetRunes) > 0 {
+				result[i] = charSetRunes[rand.Intn(len(charSetRunes))]
+			} else {
+				// 如果字符集为空，使用默认字符
+				result[i] = 'a'
+			}
 		}
 	}
 
@@ -993,6 +1072,11 @@ func (g *FunctionGenerator) Generate(rule *FieldRule, index int64) (interface{},
 		}
 
 		// 获取 UUID 配置选项
+		if v, exists := configMap["version"]; exists {
+			if versionStr, ok := v.(string); ok {
+				config.Version = versionStr
+			}
+		}
 		if c, exists := configMap["case"]; exists {
 			if caseStr, ok := c.(string); ok {
 				config.Case = caseStr
@@ -1023,8 +1107,13 @@ func (g *FunctionGenerator) Generate(rule *FieldRule, index int64) (interface{},
 
 	// 对于 UUID 函数，传递配置选项
 	if config.FuncName == "UUID" {
+		version := config.Version
+		if version == "" {
+			version = "v4" // 默认使用 v4
+		}
 		uuidParams := []interface{}{
 			map[string]interface{}{
+				"version":     version,
 				"case":        config.Case,
 				"with_hyphen": config.WithHyphen,
 			},
@@ -1056,6 +1145,7 @@ func (g *FunctionGenerator) registerBuiltinFunctions() {
 		// 从配置中获取 UUID 选项（如果存在）
 		var caseOption string = "mixed"
 		var withHyphen bool = true
+		var version string = "v4" // 默认使用 v4
 
 		// 尝试从 params 中获取配置（如果通过 FunctionConfig 传递）
 		if len(params) > 0 {
@@ -1070,10 +1160,44 @@ func (g *FunctionGenerator) registerBuiltinFunctions() {
 						withHyphen = withHyphenBool
 					}
 				}
+				if v, exists := configMap["version"]; exists {
+					if versionStr, ok := v.(string); ok {
+						version = versionStr
+					}
+				}
 			}
 		}
 
-		uuidStr := uuid.New().String()
+		var uuidStr string
+
+		// 根据版本生成 UUID
+		switch strings.ToLower(version) {
+		case "v1":
+			// V1: 基于时间戳和 MAC 地址
+			uuidVal, err := uuid.NewUUID()
+			if err != nil {
+				return nil, fmt.Errorf("生成 UUID v1 失败: %w", err)
+			}
+			uuidStr = uuidVal.String()
+		case "v3":
+			// V3: 基于命名空间和名称的 MD5 哈希
+			// 需要命名空间 UUID 和名称，这里使用默认命名空间和随机名称
+			namespace := uuid.NameSpaceDNS
+			name := fmt.Sprintf("default-%d", time.Now().UnixNano())
+			uuidStr = uuid.NewMD5(namespace, []byte(name)).String()
+		case "v4":
+			// V4: 随机生成（默认）
+			uuidStr = uuid.New().String()
+		case "v5":
+			// V5: 基于命名空间和名称的 SHA-1 哈希
+			// 需要命名空间 UUID 和名称，这里使用默认命名空间和随机名称
+			namespace := uuid.NameSpaceDNS
+			name := fmt.Sprintf("default-%d", time.Now().UnixNano())
+			uuidStr = uuid.NewSHA1(namespace, []byte(name)).String()
+		default:
+			// 默认使用 v4
+			uuidStr = uuid.New().String()
+		}
 
 		// 处理大小写
 		switch caseOption {
@@ -1120,16 +1244,8 @@ func (g *FunctionGenerator) registerBuiltinFunctions() {
 type NullGenerator struct{}
 
 func (g *NullGenerator) Generate(rule *FieldRule, index int64) (interface{}, error) {
-	var config NullConfig
-	if err := unmarshalConfig(rule.Config, &config); err != nil {
-		return nil, err
-	}
-
-	if rand.Float64() < config.Probability {
-		return nil, nil
-	}
-	// 如果概率不满足，返回默认值或空字符串
-	return "", nil
+	// 空值规则总是返回 NULL
+	return nil, nil
 }
 
 type TemplateGenerator struct{}

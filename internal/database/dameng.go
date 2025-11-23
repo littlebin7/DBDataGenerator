@@ -695,8 +695,9 @@ func (db *DamengDB) QueryTableData(database, table string, limit, offset int) ([
 	if database != "" {
 		tableName = fmt.Sprintf("%s.%s", strings.ToUpper(database), table)
 	}
-	query := fmt.Sprintf("SELECT * FROM %s LIMIT ? OFFSET ?", tableName)
-	rows, err := db.db.Query(query, limit, offset)
+	// 达梦数据库使用 ROWNUM 实现分页（类似 Oracle）
+	query := fmt.Sprintf("SELECT * FROM (SELECT a.*, ROWNUM rnum FROM (SELECT * FROM %s) a WHERE ROWNUM <= %d) WHERE rnum > %d", tableName, offset+limit, offset)
+	rows, err := db.db.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("查询数据失败: %w", err)
 	}
@@ -814,13 +815,39 @@ func (db *DamengDB) ExecuteNonQuery(database, query string, args ...interface{})
 }
 
 func (db *DamengDB) GetForeignTableData(database, table, field string, limit int) ([]interface{}, error) {
+	if table == "" {
+		return nil, fmt.Errorf("外键关联表名不能为空")
+	}
+	if field == "" {
+		return nil, fmt.Errorf("外键字段名不能为空")
+	}
+
+	// 清理参数：移除换行符、制表符等空白字符，并去除首尾空格
+	table = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(table, "\n", ""), "\t", ""))
+	field = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(field, "\n", ""), "\t", ""))
+	database = strings.TrimSpace(strings.ReplaceAll(strings.ReplaceAll(database, "\n", ""), "\t", ""))
+
+	if table == "" {
+		return nil, fmt.Errorf("外键关联表名不能为空")
+	}
+	if field == "" {
+		return nil, fmt.Errorf("外键字段名不能为空")
+	}
+
 	// 构建表名（如果指定了模式名，使用 模式名.表名 格式）
 	tableName := table
 	if database != "" {
-		tableName = fmt.Sprintf("%s.%s", strings.ToUpper(database), table)
+		tableName = fmt.Sprintf("%s.%s", strings.ToUpper(database), strings.ToUpper(table))
+	} else {
+		tableName = strings.ToUpper(table)
 	}
-	query := fmt.Sprintf("SELECT %s FROM %s LIMIT ?", field, tableName)
-	rows, err := db.db.Query(query, limit)
+
+	// 字段名也需要转换为大写（达梦数据库默认大写）
+	fieldName := strings.ToUpper(field)
+
+	// 达梦数据库使用 ROWNUM 实现分页（类似 Oracle）
+	query := fmt.Sprintf("SELECT %s FROM %s WHERE ROWNUM <= %d", fieldName, tableName, limit)
+	rows, err := db.db.Query(query)
 	if err != nil {
 		return nil, err
 	}

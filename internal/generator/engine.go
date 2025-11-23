@@ -12,28 +12,40 @@ import (
 	"DBDataGenerator/internal/database"
 )
 
+// foreignKeyRepeatState 外键重复状态
+type foreignKeyRepeatState struct {
+	CurrentValue  interface{} // 当前值
+	CurrentRepeat int         // 当前重复次数
+	TargetRepeat  int         // 目标重复次数（随机在 min-max 之间）
+	ValueIndex    int         // 当前值在数组中的索引
+}
+
 // Engine 数据生成引擎
 type Engine struct {
-	db             database.Database
-	ruleGenerators map[string]RuleGenerator
-	incrementGen   *IncrementGenerator
-	functionGen    *FunctionGenerator
-	fileGen        *FileGenerator
-	binaryGen      *BinaryGenerator
-	uniqueValues   map[string]map[interface{}]bool // 用于唯一约束
-	mu             sync.RWMutex
+	db                    database.Database
+	ruleGenerators        map[string]RuleGenerator
+	incrementGen          *IncrementGenerator
+	functionGen           *FunctionGenerator
+	fileGen               *FileGenerator
+	binaryGen             *BinaryGenerator
+	uniqueValues          map[string]map[interface{}]bool   // 用于唯一约束
+	foreignKeyUsedValues  map[string]map[interface{}]bool   // 用于外键不重复模式
+	foreignKeyRepeatState map[string]*foreignKeyRepeatState // 用于外键重复模式
+	mu                    sync.RWMutex
 }
 
 // NewEngine 创建新的生成引擎
 func NewEngine(db database.Database) *Engine {
 	engine := &Engine{
-		db:             db,
-		ruleGenerators: make(map[string]RuleGenerator),
-		incrementGen:   NewIncrementGenerator(),
-		functionGen:    NewFunctionGenerator(),
-		fileGen:        NewFileGenerator(),
-		binaryGen:      NewBinaryGenerator(),
-		uniqueValues:   make(map[string]map[interface{}]bool),
+		db:                    db,
+		ruleGenerators:        make(map[string]RuleGenerator),
+		incrementGen:          NewIncrementGenerator(),
+		functionGen:           NewFunctionGenerator(),
+		fileGen:               NewFileGenerator(),
+		binaryGen:             NewBinaryGenerator(),
+		uniqueValues:          make(map[string]map[interface{}]bool),
+		foreignKeyUsedValues:  make(map[string]map[interface{}]bool),
+		foreignKeyRepeatState: make(map[string]*foreignKeyRepeatState),
 	}
 
 	// 注册规则生成器
@@ -180,6 +192,11 @@ func (e *Engine) generateFieldValue(rule *FieldRule, index int64, config *TableC
 		return nil, fmt.Errorf("reference 生成器类型错误")
 	}
 
+	// 处理 foreign 规则（外键引用）
+	if rule.RuleType == "foreign" {
+		return e.generateForeignKeyValue(rule, config)
+	}
+
 	// 处理 template 规则（如果包含字段引用，使用行数据）
 	if rule.RuleType == "template" {
 		gen, ok := e.ruleGenerators["template"]
@@ -224,16 +241,42 @@ func (e *Engine) generateForeignKeyValue(rule *FieldRule, config *TableConfig) (
 			// 使用默认配置
 			fkConfig.ForeignTable = rule.ForeignTable
 			fkConfig.ForeignField = rule.FieldName
-			fkConfig.RandomSelect = true
+			fkConfig.GenerationMode = "random"
 		}
 	} else {
 		fkConfig.ForeignTable = rule.ForeignTable
 		fkConfig.ForeignField = rule.FieldName
-		fkConfig.RandomSelect = true
+		fkConfig.GenerationMode = "random"
+	}
+
+	// 向后兼容：如果 generation_mode 为空，使用 random_select
+	if fkConfig.GenerationMode == "" {
+		if fkConfig.RandomSelect {
+			fkConfig.GenerationMode = "random"
+		} else {
+			fkConfig.GenerationMode = "non_repeating"
+		}
+	}
+
+	// 验证外键配置
+	foreignDatabase := fkConfig.ForeignDatabase
+	if foreignDatabase == "" {
+		foreignDatabase = config.Database
+	}
+
+	if fkConfig.ForeignTable == "" {
+		// 如果配置中没有，尝试使用规则中的外键表
+		if rule.ForeignTable == "" {
+			return nil, fmt.Errorf("外键关联表名未配置，字段 %s 需要指定关联表", rule.FieldName)
+		}
+		fkConfig.ForeignTable = rule.ForeignTable
+	}
+	if fkConfig.ForeignField == "" {
+		fkConfig.ForeignField = rule.FieldName
 	}
 
 	// 从关联表获取数据
-	values, err := e.db.GetForeignTableData(config.Database, fkConfig.ForeignTable, fkConfig.ForeignField, 1000)
+	values, err := e.db.GetForeignTableData(foreignDatabase, fkConfig.ForeignTable, fkConfig.ForeignField, 1000)
 	if err != nil {
 		return nil, fmt.Errorf("获取外键数据失败: %w", err)
 	}
@@ -242,17 +285,99 @@ func (e *Engine) generateForeignKeyValue(rule *FieldRule, config *TableConfig) (
 		return nil, fmt.Errorf("关联表 %s 没有数据", fkConfig.ForeignTable)
 	}
 
-	// 随机选择
-	if fkConfig.RandomSelect {
+	// 生成唯一键用于状态管理
+	stateKey := fmt.Sprintf("%s.%s.%s.%s", config.TableName, rule.FieldName, fkConfig.ForeignTable, fkConfig.ForeignField)
+
+	// 根据生成模式选择值
+	switch fkConfig.GenerationMode {
+	case "random":
+		// 随机选择
+		return values[rand.Intn(len(values))], nil
+
+	case "non_repeating":
+		// 不重复模式：确保每个值只使用一次
+		e.mu.Lock()
+		defer e.mu.Unlock()
+
+		if e.foreignKeyUsedValues[stateKey] == nil {
+			e.foreignKeyUsedValues[stateKey] = make(map[interface{}]bool)
+		}
+
+		// 如果所有值都已使用，重置
+		if len(e.foreignKeyUsedValues[stateKey]) >= len(values) {
+			e.foreignKeyUsedValues[stateKey] = make(map[interface{}]bool)
+		}
+
+		// 从未使用的值中随机选择
+		unusedValues := make([]interface{}, 0)
+		for _, v := range values {
+			if !e.foreignKeyUsedValues[stateKey][v] {
+				unusedValues = append(unusedValues, v)
+			}
+		}
+
+		if len(unusedValues) == 0 {
+			// 所有值都已使用，重置并随机选择
+			e.foreignKeyUsedValues[stateKey] = make(map[interface{}]bool)
+			selectedValue := values[rand.Intn(len(values))]
+			e.foreignKeyUsedValues[stateKey][selectedValue] = true
+			return selectedValue, nil
+		}
+
+		selectedValue := unusedValues[rand.Intn(len(unusedValues))]
+		e.foreignKeyUsedValues[stateKey][selectedValue] = true
+		return selectedValue, nil
+
+	case "repeat":
+		// 重复模式：每个值重复指定次数
+		e.mu.Lock()
+		defer e.mu.Unlock()
+
+		state := e.foreignKeyRepeatState[stateKey]
+		if state == nil {
+			// 初始化状态
+			state = &foreignKeyRepeatState{
+				CurrentValue:  values[0],
+				CurrentRepeat: 0,
+				ValueIndex:    0,
+			}
+			// 计算目标重复次数
+			repeatMin := fkConfig.RepeatMin
+			if repeatMin <= 0 {
+				repeatMin = 1
+			}
+			repeatMax := fkConfig.RepeatMax
+			if repeatMax < repeatMin {
+				repeatMax = repeatMin
+			}
+			state.TargetRepeat = repeatMin + rand.Intn(repeatMax-repeatMin+1)
+			e.foreignKeyRepeatState[stateKey] = state
+		}
+
+		// 如果当前值已达到目标重复次数，切换到下一个值
+		if state.CurrentRepeat >= state.TargetRepeat {
+			state.ValueIndex = (state.ValueIndex + 1) % len(values)
+			state.CurrentValue = values[state.ValueIndex]
+			state.CurrentRepeat = 0
+			// 重新计算目标重复次数
+			repeatMin := fkConfig.RepeatMin
+			if repeatMin <= 0 {
+				repeatMin = 1
+			}
+			repeatMax := fkConfig.RepeatMax
+			if repeatMax < repeatMin {
+				repeatMax = repeatMin
+			}
+			state.TargetRepeat = repeatMin + rand.Intn(repeatMax-repeatMin+1)
+		}
+
+		state.CurrentRepeat++
+		return state.CurrentValue, nil
+
+	default:
+		// 默认使用随机模式
 		return values[rand.Intn(len(values))], nil
 	}
-
-	// 顺序选择（使用索引）
-	index := len(values) % 1000
-	if index >= len(values) {
-		index = index % len(values)
-	}
-	return values[index], nil
 }
 
 // applyConstraints 应用约束
