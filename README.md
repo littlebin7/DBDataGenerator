@@ -50,10 +50,10 @@
 ## 📚 文档
 
 - **[README.md](README.md)** - 项目主文档（当前文档）
-- **[BUILD.md](BUILD.md)** - 构建和部署说明
-- **[CHANGELOG.md](CHANGELOG.md)** - 变更日志
 - **[docs/TECHNICAL.md](docs/TECHNICAL.md)** - 技术文档（架构、API、数据库支持等）
 - **[docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)** - 开发文档（优化历史、实现进度等）
+- **[docs/DATABASE_SUPPORT.md](docs/DATABASE_SUPPORT.md)** - 数据库支持说明
+- **[docs/DATA_GENERATION_TYPES.md](docs/DATA_GENERATION_TYPES.md)** - 数据生成规则详细说明
 
 更多文档请查看 [docs/](docs/) 目录。
 
@@ -350,15 +350,32 @@ storage:
 ### WebSocket
 - `WS /ws/task/:id` - 任务状态实时推送
 
-## 文档说明
+## 项目维护
 
-项目包含以下详细文档：
+### 代码规范
 
-- **README.md** - 快速开始和使用说明
-- **PROJECT_SUMMARY.md** - 详细的项目总结文档（包含完整功能清单、使用流程、设计决策等）
-- **DESIGN.md** - 技术架构和设计文档
-- **DATA_GENERATION_TYPES.md** - 数据生成规则详细说明（14种规则类型、字段类型映射、智能过滤等）
-- **NAVICAT_RULES_COMPARISON.md** - 与 Navicat 功能对比
+- 已清理所有调试日志（`console.log`、`console.warn`、`console.error` 等）
+- 已删除所有单元测试文件（`*_test.go`）
+- 已删除不需要的目录（`web-v2`、`test_sql` 等）
+- 代码遵循 Go 和 Vue 3 最佳实践
+
+### 构建说明
+
+项目提供了跨平台的构建脚本：
+
+- **Windows**: `build.bat`（Go 1.21+）或 `build-win7.bat`（Go 1.20，兼容 Windows 7）
+- **Linux/Mac**: `build.sh`
+
+构建脚本会自动：
+1. 编译 Go 后端
+2. 构建前端（Vite）
+3. 打包成可执行文件
+
+### 注意事项
+
+- 前端使用 ES Module（`"type": "module"`），已解决 Vite CJS 弃用警告
+- 后端使用结构化日志（zap），不包含调试输出
+- 项目结构清晰，便于维护和扩展
 
 ## 开发计划
 

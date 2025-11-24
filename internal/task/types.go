@@ -40,7 +40,12 @@ type Task struct {
 	Progress      float64                `json:"progress"`       // 进度百分比
 	Speed         float64                `json:"speed"`          // 生成速度（行/秒）
 	ETA           time.Duration          `json:"eta"`            // 预计剩余时间
-	mu            sync.RWMutex           `json:"-"`              // 互斥锁
+	// 任务组相关字段
+	IsTaskGroup  bool         `json:"is_task_group"`  // 是否为任务组
+	ParentTaskID string       `json:"parent_task_id"` // 父任务ID（如果是子任务）
+	SubTaskIDs   []string     `json:"sub_task_ids"`   // 子任务ID列表（如果是任务组）
+	ThreadIndex  int          `json:"thread_index"`   // 线程索引（子任务使用，0-based）
+	mu           sync.RWMutex `json:"-"`              // 互斥锁
 }
 
 // UpdateProgress 更新进度

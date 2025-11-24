@@ -496,7 +496,8 @@ func (db *DamengDB) GetTableSchema(database, table string) (*TableSchema, error)
 		} else {
 			fkQuery = `
 				SELECT 
-					uc2.TABLE_NAME AS REFERENCED_TABLE
+					uc2.TABLE_NAME AS REFERENCED_TABLE,
+					uc2.OWNER AS REFERENCED_OWNER
 				FROM ALL_CONS_COLUMNS ucc
 				JOIN ALL_CONSTRAINTS uc ON ucc.CONSTRAINT_NAME = uc.CONSTRAINT_NAME AND ucc.OWNER = uc.OWNER
 				JOIN ALL_CONSTRAINTS uc2 ON uc.R_CONSTRAINT_NAME = uc2.CONSTRAINT_NAME AND uc2.OWNER = uc.OWNER
@@ -504,11 +505,25 @@ func (db *DamengDB) GetTableSchema(database, table string) (*TableSchema, error)
 					AND ucc.COLUMN_NAME = ?
 					AND uc.CONSTRAINT_TYPE = 'R'
 			`
-			err = db.db.QueryRowContext(ctx, fkQuery, strings.ToUpper(database), tableName, fieldNameUpper).Scan(&foreignTable)
+			var foreignOwner sql.NullString
+			err = db.db.QueryRowContext(ctx, fkQuery, strings.ToUpper(database), tableName, fieldNameUpper).Scan(&foreignTable, &foreignOwner)
+			if err == nil && foreignTable.Valid {
+				field.IsForeignKey = true
+				field.ForeignTable = foreignTable.String
+				// 保存外键数据库/模式信息（即使在同一模式中也要保存，方便前端使用）
+				if foreignOwner.Valid {
+					field.ForeignDatabase = foreignOwner.String
+				} else if database != "" {
+					// 如果没有查询到，但指定了数据库，使用当前数据库
+					field.ForeignDatabase = strings.ToUpper(database)
+				}
+			}
 		}
-		if err == nil && foreignTable.Valid {
+		// 处理查询结果（无论是否指定了数据库）
+		if err == nil && foreignTable.Valid && !field.IsForeignKey {
 			field.IsForeignKey = true
 			field.ForeignTable = foreignTable.String
+			// 如果没有指定数据库，不设置 ForeignDatabase（使用当前用户的默认模式）
 		}
 
 		schema.Fields = append(schema.Fields, field)

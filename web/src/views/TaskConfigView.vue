@@ -45,6 +45,19 @@
                     />
                   </el-form-item>
                 </el-col>
+                <el-col :span="12">
+                  <el-form-item label="线程数">
+                    <el-input-number 
+                      v-model="taskConfig.threadCount" 
+                      :min="1" 
+                      :max="10"
+                      style="width: 100%"
+                    />
+                    <div style="font-size: 12px; color: #909399; margin-top: 4px">
+                      最多支持10个线程，主键将统一生成以避免冲突
+                    </div>
+                  </el-form-item>
+                </el-col>
               </el-row>
             </el-form>
           </el-collapse-item>
@@ -89,26 +102,62 @@
             <template #default="scope">
               <!-- 随机字符串配置 -->
               <div v-if="scope.row.ruleType === 'random_string'" style="display: flex; flex-direction: column; gap: 10px">
+                <!-- 长度模式选择 -->
+                <div style="display: flex; gap: 10px; align-items: center">
+                  <span style="font-size: 12px; color: #606266; width: 80px;">长度模式:</span>
+                  <el-radio-group v-model="scope.row.config.lengthMode" size="small" @change="() => {
+                    // 确保 lengthMode 有默认值
+                    if (!scope.row.config.lengthMode) {
+                      scope.row.config.lengthMode = 'random'
+                    }
+                    // 切换模式时，清空另一个模式的配置
+                    if (scope.row.config.lengthMode === 'fixed') {
+                      scope.row.config.minLength = 0
+                      scope.row.config.maxLength = 0
+                    } else {
+                      scope.row.config.fixedLength = 0
+                    }
+                    validateFieldRule(scope.row)
+                  }">
+                    <el-radio-button label="random">随机长度</el-radio-button>
+                    <el-radio-button label="fixed">固定长度</el-radio-button>
+                  </el-radio-group>
+                </div>
                 <!-- 基础配置 -->
                 <div style="display: flex; gap: 10px; flex-wrap: wrap; align-items: center">
-                  <el-input-number 
-                    v-model="scope.row.config.minLength" 
-                    :min="1" 
-                    :max="scope.row.maxLength || 1000"
-                    placeholder="最小长度"
-                    size="small"
-                    style="width: 100px"
-                    @change="() => validateFieldRule(scope.row)"
-                  />
-                  <el-input-number 
-                    v-model="scope.row.config.maxLength" 
-                    :min="1" 
-                    :max="scope.row.maxLength || 1000"
-                    placeholder="最大长度"
-                    size="small"
-                    style="width: 100px"
-                    @change="() => validateFieldRule(scope.row)"
-                  />
+                  <!-- 随机长度模式 -->
+                  <template v-if="!scope.row.config.lengthMode || scope.row.config.lengthMode === 'random'">
+                    <el-input-number 
+                      v-model="scope.row.config.minLength" 
+                      :min="1" 
+                      :max="scope.row.maxLength || 1000"
+                      placeholder="最小长度"
+                      size="small"
+                      style="width: 100px"
+                      @change="() => validateFieldRule(scope.row)"
+                    />
+                    <el-input-number 
+                      v-model="scope.row.config.maxLength" 
+                      :min="1" 
+                      :max="scope.row.maxLength || 1000"
+                      placeholder="最大长度"
+                      size="small"
+                      style="width: 100px"
+                      @change="() => validateFieldRule(scope.row)"
+                    />
+                  </template>
+                  <!-- 固定长度模式 -->
+                  <template v-else>
+                    <el-input-number 
+                      v-model="scope.row.config.fixedLength" 
+                      :min="1" 
+                      :max="scope.row.maxLength || 1000"
+                      placeholder="固定长度"
+                      size="small"
+                      style="width: 100px"
+                      @change="() => validateFieldRule(scope.row)"
+                    />
+                  </template>
                   <el-select 
                     v-model="scope.row.config.charSet" 
                     multiple
@@ -143,19 +192,6 @@
                       <span style="font-size: 12px; color: #909399;">高级配置（粒度控制）</span>
                     </template>
                     <div style="display: flex; flex-direction: column; gap: 10px; padding: 10px; background: #f5f7fa; border-radius: 4px;">
-                      <!-- 固定长度 -->
-                      <div style="display: flex; gap: 10px; align-items: center">
-                        <span style="width: 80px; font-size: 12px;">固定长度:</span>
-                        <el-input-number 
-                          v-model="scope.row.config.fixedLength" 
-                          :min="1"
-                          :max="scope.row.maxLength || 1000"
-                          placeholder="固定长度（可选）"
-                          size="small"
-                          style="width: 120px"
-                          @change="() => validateFieldRule(scope.row)"
-                        />
-                      </div>
                       <!-- 大小写 -->
                       <div style="display: flex; gap: 10px; align-items: center">
                         <span style="width: 80px; font-size: 12px;">大小写:</span>
@@ -284,18 +320,6 @@
                       <span style="font-size: 12px; color: #909399;">高级配置（粒度控制）</span>
                     </template>
                     <div style="display: flex; flex-direction: column; gap: 10px; padding: 10px; background: #f5f7fa; border-radius: 4px;">
-                      <!-- 步长 -->
-                      <div style="display: flex; gap: 10px; align-items: center">
-                        <span style="width: 80px; font-size: 12px;">步长:</span>
-                        <el-input-number 
-                          v-model="scope.row.config.step" 
-                          :precision="2"
-                          placeholder="步长（可选）"
-                          size="small"
-                          style="width: 120px"
-                          @change="() => validateFieldRule(scope.row)"
-                        />
-                      </div>
                       <!-- 精度和小数位数（仅浮点类型且选择小数时显示） -->
                       <div v-if="isFloatType(scope.row) && !scope.row.config.isInt" style="display: flex; gap: 10px; align-items: center">
                         <span style="width: 80px; font-size: 12px;">精度:</span>
@@ -323,12 +347,17 @@
                         <span style="width: 80px; font-size: 12px;">固定长度:</span>
                         <el-input-number 
                           v-model="scope.row.config.fixedLength" 
-                          :min="1"
+                          :min="0"
                           :max="scope.row.maxLength || 1000"
-                          placeholder="固定长度（可选）"
+                          placeholder="固定长度（0=不固定）"
                           size="small"
                           style="width: 120px"
-                          @change="() => validateFieldRule(scope.row)"
+                          @change="() => {
+                            if (scope.row.config.fixedLength === null || scope.row.config.fixedLength === undefined) {
+                              scope.row.config.fixedLength = 0
+                            }
+                            validateFieldRule(scope.row)
+                          }"
                         />
                       </div>
                       <!-- 分布类型 -->
@@ -739,7 +768,6 @@
                     v-model="scope.row.config.funcName" 
                     size="small" 
                     style="width: 150px"
-                    @change="(val) => { console.log('[函数选择]', scope.row.fieldName, '选择了:', val, '当前config:', scope.row.config) }"
                   >
                     <el-option label="NOW()" value="NOW" />
                     <el-option label="TODAY()" value="TODAY" />
@@ -911,8 +939,14 @@
                     style="flex: 1"
                     :loading="foreignTablesLoading[scope.row.fieldName]"
                     :disabled="!scope.row.config.foreignDatabase"
-                    @visible-change="(visible) => { if (visible && scope.row.config.foreignDatabase && !foreignTables[scope.row.fieldName]?.length) loadForeignTables(scope.row.fieldName, scope.row.config.foreignDatabase) }"
-                    @change="onForeignTableChange(scope.row)"
+                    @visible-change="(visible) => { 
+                      if (visible && scope.row.config.foreignDatabase && !foreignTables[scope.row.fieldName]?.length) {
+                        loadForeignTables(scope.row.fieldName, scope.row.config.foreignDatabase)
+                      }
+                    }"
+                    @change="(val) => {
+                      onForeignTableChange(scope.row)
+                    }"
                   >
                     <el-option 
                       v-for="table in foreignTables[scope.row.fieldName] || []"
@@ -1337,7 +1371,11 @@
               :label="field.fieldName"
               min-width="150"
               show-overflow-tooltip
-            />
+            >
+              <template #default="{ row }">
+                <span>{{ row[field.fieldName] }}</span>
+              </template>
+            </el-table-column>
           </el-table>
           <div v-if="previewData.length === 0 && !previewLoading" style="text-align: center; padding: 40px; color: #909399">
             <el-empty description="暂无预览数据" />
@@ -1432,7 +1470,7 @@
     name: '',
     totalRows: 1000,
     batchSize: 1000,
-    threadCount: 1  // 固定为1，单个任务不拆分多线程
+    threadCount: 1  // 线程数，1-10，主键将统一生成以避免冲突
   })
   
   // 获取缓存 key
@@ -1450,7 +1488,7 @@
       }
       localStorage.setItem(getCacheKey(), JSON.stringify(cacheData))
     } catch (error) {
-      console.error('保存配置到缓存失败:', error)
+      // 保存配置到缓存失败（静默处理）
     }
   }
   
@@ -1471,7 +1509,7 @@
         }
       }
     } catch (error) {
-      console.error('从缓存恢复配置失败:', error)
+      // 从缓存恢复配置失败（静默处理）
     }
     return null
   }
@@ -1481,7 +1519,7 @@
     try {
       localStorage.removeItem(getCacheKey())
     } catch (error) {
-      console.error('清除缓存失败:', error)
+      // 清除缓存失败（静默处理）
     }
   }
   
@@ -1562,7 +1600,6 @@
       try {
         const task = await api.getTask(taskId.value)
         if (task && task.config && task.config.field_rules) {
-          console.log('编辑模式：加载任务配置', task.config)
           
           // 将任务配置的字段规则应用到字段规则列表
           const fieldMap = new Map()
@@ -1574,7 +1611,6 @@
           task.config.field_rules.forEach(rule => {
             const field = fieldMap.get(rule.field_name)
             if (field) {
-              console.log(`应用字段规则: ${rule.field_name}`, rule)
               // 先设置规则类型
               field.ruleType = rule.rule_type
               // 然后获取默认配置作为基础
@@ -1587,21 +1623,56 @@
                 mergedConfig.maxValue = taskConfig.value.totalRows || 1000
               }
               
+              // 特殊处理：如果是 random_string 类型，根据 fixed_length 判断长度模式
+              if (rule.rule_type === 'random_string' && rule.config) {
+                const ruleConfig = rule.config
+                // 根据配置判断长度模式（兼容旧配置）
+                const lengthMode = (ruleConfig.fixed_length > 0) ? 'fixed' : 'random'
+                mergedConfig.lengthMode = lengthMode
+                
+                // 如果是从旧配置加载，需要转换格式
+                if (ruleConfig.fixed_length !== undefined) {
+                  mergedConfig.fixedLength = ruleConfig.fixed_length
+                }
+                if (ruleConfig.min_length !== undefined) {
+                  mergedConfig.minLength = ruleConfig.min_length
+                }
+                if (ruleConfig.max_length !== undefined) {
+                  mergedConfig.maxLength = ruleConfig.max_length
+                }
+                if (ruleConfig.char_set !== undefined) {
+                  mergedConfig.charSet = ruleConfig.char_set
+                }
+                if (ruleConfig.case !== undefined) {
+                  mergedConfig.case = ruleConfig.case
+                }
+                if (ruleConfig.number_position !== undefined) {
+                  mergedConfig.numberPosition = ruleConfig.number_position
+                }
+                if (ruleConfig.prefix !== undefined) {
+                  mergedConfig.prefix = ruleConfig.prefix
+                }
+                if (ruleConfig.suffix !== undefined) {
+                  mergedConfig.suffix = ruleConfig.suffix
+                }
+                if (ruleConfig.custom_chars !== undefined) {
+                  mergedConfig.customChars = ruleConfig.custom_chars
+                }
+              }
+              
               field.config = mergedConfig
               
               // 触发规则类型变化，确保配置正确应用
               // 注意：这里不调用 onRuleTypeChange，因为我们已经手动设置了配置
             } else {
-              console.warn(`字段 ${rule.field_name} 在表结构中不存在`)
             }
           })
           
           ElMessage.success('任务配置已恢复')
         } else {
-          console.warn('任务配置中没有字段规则')
         }
       } catch (error) {
-        console.error('加载任务字段规则失败:', error)
+        // 加载任务字段规则失败（已通过 ElMessage 提示用户）
         ElMessage.error('加载任务配置失败: ' + (error.formattedMessage || error.message))
       }
     }
@@ -1670,7 +1741,7 @@
         field.config.foreignDatabase = database.value
       }
     } catch (error) {
-      console.error('加载数据库列表失败:', error)
+      // 加载数据库列表失败（已通过 ElMessage 提示用户）
       ElMessage.error('加载数据库列表失败: ' + (error.formattedMessage || error.message))
     } finally {
       foreignDatabasesLoading.value[fieldName] = false
@@ -1686,7 +1757,15 @@
     foreignTablesLoading.value[fieldName] = true
     try {
       const response = await api.getTables(foreignDatabase, connectionId.value)
-      const tables = response.tables || []
+      // 处理响应格式：可能是 response.tables 或 response.data.tables
+      let tables = []
+      if (response.tables) {
+        tables = response.tables
+      } else if (response.data && response.data.tables) {
+        tables = response.data.tables
+      } else if (Array.isArray(response)) {
+        tables = response
+      }
       
       // 处理可能的对象数组格式（虽然 GetTables 应该返回字符串数组，但为了兼容性还是处理一下）
       const processedTables = tables.map(table => {
@@ -1700,7 +1779,7 @@
       
       foreignTables.value[fieldName] = processedTables
     } catch (error) {
-      console.error('加载表列表失败:', error)
+      // 加载表列表失败（已通过 ElMessage 提示用户）
       ElMessage.error('加载表列表失败: ' + (error.formattedMessage || error.message))
     } finally {
       foreignTablesLoading.value[fieldName] = false
@@ -1722,7 +1801,7 @@
       }))
       foreignFields.value[fieldName] = fields
     } catch (error) {
-      console.error('加载字段列表失败:', error)
+      // 加载字段列表失败（已通过 ElMessage 提示用户）
       ElMessage.error('加载字段列表失败: ' + (error.formattedMessage || error.message))
     } finally {
       foreignFieldsLoading.value[fieldName] = false
@@ -1770,12 +1849,10 @@
   const loadTableSchema = async () => {
     // 如果是编辑模式但还没有表名，等待任务配置加载完成
     if (isEditMode.value && !tableName.value) {
-      console.log('编辑模式：等待任务配置加载完成')
       return
     }
     
     if (!tableName.value || !database.value) {
-      console.warn('表名或数据库名为空，无法加载表结构')
       return
     }
     
@@ -1787,9 +1864,6 @@
       const response = await api.getTableSchema(database.value, tableName.value, connectionId.value)
       tableSchema.value = response
       
-      // 调试：打印响应数据
-      console.log('表结构响应数据:', response)
-      console.log('字段列表:', response.fields)
       
       // 初始化字段规则
       if (!response.fields || response.fields.length === 0) {
@@ -1822,7 +1896,7 @@
               if (!field) return cachedRule
               
               // 保留缓存的规则类型和配置，但更新字段元数据
-              return {
+              const restoredRule = {
                 ...cachedRule,
                 fieldType: field.type || field.Type,
                 goType: (field.go_type || field.GoType || '').toLowerCase(),
@@ -1833,8 +1907,21 @@
                 defaultValue: field.default_value || field.DefaultValue,
                 maxLength: field.max_length || field.MaxLength || 0,
                 precision: field.precision || field.Precision || 0,
-                scale: field.scale || field.Scale || 0
+                scale: field.scale || field.Scale || 0,
+                // 更新外键信息（从接口返回的最新字段信息中获取）
+                foreignTable: field.foreign_table || field.ForeignTable || field.foreignTable || cachedRule.foreignTable || '',
+                foreignDatabase: field.foreign_database || field.ForeignDatabase || field.foreignDatabase || cachedRule.foreignDatabase || ''
               }
+              
+              // 兼容性处理：如果是 random_string 类型且没有 lengthMode，根据 fixedLength 自动设置
+              if (restoredRule.ruleType === 'random_string' && restoredRule.config) {
+                if (!restoredRule.config.lengthMode) {
+                  restoredRule.config.lengthMode = (restoredRule.config.fixedLength > 0) ? 'fixed' : 'random'
+                }
+              }
+              
+              
+              return restoredRule
             })
             
             // 恢复任务配置
@@ -1843,7 +1930,6 @@
             }
             
             ElMessage.info('已恢复上次的配置')
-            console.log('从缓存恢复的字段规则:', fieldRules.value)
             return
           } else {
             // 字段不匹配，清除缓存
@@ -1871,7 +1957,7 @@
           defaultConfig.maxValue = defaultMaxValue
         }
         
-        return {
+        const fieldRule = {
           fieldName: field.name || field.Name,
           fieldType: field.type || field.Type,
           goType: (field.go_type || field.GoType || '').toLowerCase(),
@@ -1885,14 +1971,17 @@
           maxLength: field.max_length || field.MaxLength || 0,
           precision: field.precision || field.Precision || 0,
           scale: field.scale || field.Scale || 0,
-          // 保存外键信息
-          foreignTable: field.foreign_table || field.ForeignTable || ''
+          // 保存外键信息（尝试多种可能的字段名格式）
+          foreignTable: field.foreign_table || field.ForeignTable || field.foreignTable || '',
+          foreignDatabase: field.foreign_database || field.ForeignDatabase || field.foreignDatabase || ''
         }
+        
+        
+        return fieldRule
       })
       
-      console.log('初始化后的字段规则:', fieldRules.value)
     } catch (error) {
-      console.error('加载表结构失败:', error)
+      // 加载表结构失败（已通过 ElMessage 提示用户）
       const errorMsg = error.formattedMessage || error.message || ''
       // 如果是连接失败的错误，提供更友好的提示
       if (errorMsg.includes('连接失败') || errorMsg.includes('连接未建立') || errorMsg.includes('请先连接')) {
@@ -2084,7 +2173,6 @@
         min: defaultMin, 
         max: defaultMax, 
         isInt: true,  // INT 类型固定为整数，不能选择小数
-        step: 0,
         precision: 0,
         scale: 0,
         fixedLength: 0,
@@ -2102,7 +2190,6 @@
         min: defaultMin, 
         max: defaultMax, 
         isInt: true,  // 默认整数，但可以改为小数
-        step: 0,
         precision: 0,
         scale: 2,  // 默认2位小数（如果选择小数）
         fixedLength: 0,
@@ -2126,7 +2213,7 @@
         startDate: '2001-01-01', 
         endDate: todayStr, 
         format: '',
-        fullDay: isTimestamp ? true : false, // 日期时间类型默认一整天，DATE 类型不设置
+        fullDay: isTimestamp ? true : undefined, // 日期时间类型默认一整天，DATE 类型不设置（undefined 表示不显示该选项）
         startTime: isTimestamp ? '09:00:00' : '', // 日期时间类型默认开始时间，DATE 类型不设置
         endTime: isTimestamp ? '18:00:00' : '', // 日期时间类型默认结束时间，DATE 类型不设置
         yearRange: [],
@@ -2184,7 +2271,8 @@
     }
   }
   
-  const onRuleTypeChange = (field) => {
+  const onRuleTypeChange = (field, options = {}) => {
+    const { skipExample = false } = options
     // 切换规则类型时重置配置
     field.config = getDefaultConfig(field)
     
@@ -2194,49 +2282,113 @@
       field.config.maxValue = defaultMaxValue
     }
     
-    // 如果是随机文本类型，确保 charSet 是数组且默认全选
+    // 如果是随机文本类型，确保 charSet 是数组且默认全选，lengthMode 默认为 'random'
     if (field.ruleType === 'random_string') {
+      if (!field.config.lengthMode) {
+        field.config.lengthMode = 'random'
+      }
       if (!field.config.charSet || !Array.isArray(field.config.charSet) || field.config.charSet.length === 0) {
         field.config.charSet = ['letters', 'numbers', 'chinese', 'special']
       }
     }
     
+    // 如果是日期时间类型，确保 fullDay 默认为 true
+    if (field.ruleType === 'random_date') {
+      const isTimestamp = isTimestampType(field)
+      if (isTimestamp && field.config.fullDay === undefined) {
+        field.config.fullDay = true
+      }
+    }
+    
+    // 如果是随机数字类型，确保 min 和 max 有默认值
+    if (field.ruleType === 'random_number') {
+      if (field.config.min === undefined || field.config.min === null) {
+        const type = (field.goType || field.go_type || '').toLowerCase()
+        const range = getNumericFieldRange(field)
+        field.config.min = Math.max(0, range.min)
+      }
+      if (field.config.max === undefined || field.config.max === null) {
+        const type = (field.goType || field.go_type || '').toLowerCase()
+        const range = getNumericFieldRange(field)
+        field.config.max = Math.min(1000, range.max)
+      }
+    }
+    
     // 如果是外键类型，自动填充外键配置
     if (field.ruleType === 'foreign') {
+      // 尝试多种可能的字段名格式来获取外键信息（在函数开始时就提取，确保在整个函数中都能使用）
+      const fieldForeignTable = field.foreignTable || field.ForeignTable || field.foreign_table || field.ForeignTable || ''
+      const fieldForeignDatabase = field.foreignDatabase || field.ForeignDatabase || field.foreign_database || field.ForeignDatabase || ''
+      
       // 自动填充外键配置
-      if (!field.config.foreignDatabase && database.value) {
-        field.config.foreignDatabase = database.value
+      // 优先使用字段的外键数据库信息，如果没有则使用当前数据库
+      if (!field.config.foreignDatabase) {
+        if (fieldForeignDatabase) {
+          field.config.foreignDatabase = fieldForeignDatabase
+        } else if (database.value) {
+          field.config.foreignDatabase = database.value
+        }
       }
       
-      // 如果字段有外键信息，自动填充
-      if (field.foreignTable || field.isForeignKey) {
-        const foreignTableName = field.foreignTable || field.ForeignTable || ''
-        if (foreignTableName && !field.config.foreignTable) {
-          field.config.foreignTable = foreignTableName
-        }
-        
-        // 外键字段名通常是当前字段名本身
-        if (!field.config.foreignField) {
-          field.config.foreignField = field.fieldName
-        }
-        
-        // 如果已选择数据库和表，自动加载表列表和字段列表
-        if (field.config.foreignDatabase) {
-          loadForeignDatabases(field.fieldName).then(() => {
+      // 如果字段有外键表信息，立即设置（不等待表列表加载）
+      if (fieldForeignTable && !field.config.foreignTable) {
+        field.config.foreignTable = fieldForeignTable
+      }
+      
+      // 外键字段名通常是当前字段名本身
+      if (!field.config.foreignField) {
+        field.config.foreignField = field.fieldName
+      }
+      
+      // 如果已选择数据库，自动加载表列表和字段列表（无论是否有外键信息）
+      if (field.config.foreignDatabase) {
+        // 先加载数据库列表（如果需要）
+        loadForeignDatabases(field.fieldName).then(() => {
+          // 加载表列表（无论是否已选择表）
+          loadForeignTables(field.fieldName, field.config.foreignDatabase).then(() => {
+            // 表列表加载完成后，如果还没有设置 foreignTable，再设置（确保表列表已存在）
+            // 使用之前提取的外键信息（在函数开始时就提取了）
+            if (fieldForeignTable && !field.config.foreignTable) {
+              field.config.foreignTable = fieldForeignTable
+            }
+            
+            // 如果已选择表，加载字段列表
             if (field.config.foreignTable) {
-              loadForeignTables(field.fieldName, field.config.foreignDatabase).then(() => {
-                if (field.config.foreignTable) {
-                  loadForeignFields(field.fieldName, field.config.foreignDatabase, field.config.foreignTable)
-                }
-              })
+              loadForeignFields(field.fieldName, field.config.foreignDatabase, field.config.foreignTable)
             }
           })
-        } else {
-          loadForeignDatabases(field.fieldName)
-        }
+        }).catch(() => {
+          // 如果加载数据库列表失败，仍然尝试加载表列表
+          loadForeignTables(field.fieldName, field.config.foreignDatabase).then(() => {
+            // 表列表加载完成后，再设置外键表名（使用之前提取的外键信息）
+            if (fieldForeignTable || field.isForeignKey) {
+              const foreignTableName = fieldForeignTable
+              if (foreignTableName) {
+                field.config.foreignTable = foreignTableName
+              }
+              if (!field.config.foreignField) {
+                field.config.foreignField = field.fieldName
+              }
+              if (field.config.foreignTable) {
+                loadForeignFields(field.fieldName, field.config.foreignDatabase, field.config.foreignTable)
+              }
+            }
+          })
+        })
       } else {
-        // 没有外键信息，只加载数据库列表
+        // 如果没有选择数据库，只加载数据库列表
         loadForeignDatabases(field.fieldName)
+        
+        // 即使没有数据库，也先设置外键表名（如果字段有外键信息，使用之前提取的值）
+        if (fieldForeignTable || field.isForeignKey) {
+          const foreignTableName = fieldForeignTable
+          if (foreignTableName && !field.config.foreignTable) {
+            field.config.foreignTable = foreignTableName
+          }
+          if (!field.config.foreignField) {
+            field.config.foreignField = field.fieldName
+          }
+        }
       }
     }
     
@@ -2293,8 +2445,10 @@
     }
     // 验证配置
     validateFieldRule(field)
-    // 重新生成示例值
-    generateFieldExample(field)
+    // 重新生成示例值（单个字段），除非明确跳过
+    if (!skipExample) {
+      generateFieldExample(field)
+    }
   }
   
   // 验证字段规则配置是否符合字段边界要求
@@ -3071,17 +3225,30 @@
             if (!Array.isArray(charSet)) {
               charSet = ['letters', 'numbers', 'chinese', 'special']
             }
-            rule.config = {
-              min_length: field.config.minLength || 10,
-              max_length: field.config.maxLength || 50,
+            // 根据长度模式决定使用固定长度还是随机长度
+            const lengthMode = field.config.lengthMode || (field.config.fixedLength > 0 ? 'fixed' : 'random')
+            const config = {
               char_set: charSet,
-              fixed_length: field.config.fixedLength || 0,
               case: field.config.case || 'mixed',
               number_position: field.config.numberPosition || 'none',
               prefix: field.config.prefix || '',
               suffix: field.config.suffix || '',
               custom_chars: field.config.customChars || ''
             }
+            
+            if (lengthMode === 'fixed' && field.config.fixedLength > 0) {
+              // 固定长度模式
+              config.fixed_length = field.config.fixedLength
+              config.min_length = 0
+              config.max_length = 0
+            } else {
+              // 随机长度模式
+              config.fixed_length = 0
+              config.min_length = field.config.minLength || 10
+              config.max_length = field.config.maxLength || 50
+            }
+            
+            rule.config = config
             break
           case 'random_number':
             rule.config = {
@@ -3276,6 +3443,7 @@
         database: database.value,
         total_rows: taskConfig.value.totalRows,
         batch_size: taskConfig.value.batchSize,
+        thread_count: taskConfig.value.threadCount || 1,
         field_rules: rules,
         use_transaction: true,
         on_error: 'skip',
@@ -3308,12 +3476,6 @@
       if (!config) {
         ElMessage.error('配置无效，无法预览')
         return
-      }
-  
-      // 调试：打印函数规则配置
-      const functionRules = config.field_rules.filter(r => r.rule_type === 'function')
-      if (functionRules.length > 0) {
-        console.log('[预览数据] 函数规则配置:', functionRules)
       }
   
       const response = await api.previewData(connectionId.value, config, previewCount.value)
@@ -3521,13 +3683,30 @@
   }
   
   // 生成单个字段的示例值
+  const fieldExampleTimers = new Map() // 每个字段的防抖定时器
   const generateFieldExample = async (field) => {
     if (!field || !field.fieldName) return
     
-    // 设置加载状态
-    fieldExampleLoading.value.set(field.fieldName, true)
+    // 如果该字段正在生成，跳过
+    if (fieldExampleLoading.value.get(field.fieldName)) {
+      return
+    }
     
-    try {
+    // 清除之前的定时器（防抖）
+    const existingTimer = fieldExampleTimers.get(field.fieldName)
+    if (existingTimer) {
+      clearTimeout(existingTimer)
+    }
+    
+    // 延迟执行，避免短时间内多次调用
+    return new Promise((resolve) => {
+      const timer = setTimeout(async () => {
+        fieldExampleTimers.delete(field.fieldName)
+        
+        // 设置加载状态
+        fieldExampleLoading.value.set(field.fieldName, true)
+        
+        try {
       // 构建配置（只包含当前字段，除非是 reference/template 规则）
       const config = buildSingleFieldConfig(field)
       if (!config) {
@@ -3584,21 +3763,189 @@
       } else {
         fieldExamples.value.set(field.fieldName, '生成失败')
       }
-    } catch (error) {
-      console.error('生成字段示例失败:', error)
-      fieldExamples.value.set(field.fieldName, '生成失败')
-    } finally {
-      fieldExampleLoading.value.set(field.fieldName, false)
-    }
+        } catch (error) {
+          console.error('生成字段示例失败:', error)
+          fieldExamples.value.set(field.fieldName, '生成失败')
+        } finally {
+          fieldExampleLoading.value.set(field.fieldName, false)
+          resolve()
+        }
+      }, 200) // 200ms 防抖延迟
+      
+      fieldExampleTimers.set(field.fieldName, timer)
+    })
   }
   
-  // 初始化时自动生成所有字段的示例值
+  // 批量生成所有字段的示例值（一次请求）
+  let isGeneratingAllExamples = false // 防止重复调用
+  let generateAllExamplesTimer = null // 防抖定时器
   const generateAllFieldExamples = async () => {
-    for (const field of fieldRules.value) {
-      if (field.ruleType && field.ruleType !== 'null') {
-        await generateFieldExample(field)
-      }
+    // 如果正在生成，直接返回
+    if (isGeneratingAllExamples) {
+      return
     }
+    
+    // 清除之前的定时器（防抖）
+    if (generateAllExamplesTimer) {
+      clearTimeout(generateAllExamplesTimer)
+      generateAllExamplesTimer = null
+    }
+    
+    // 延迟执行，避免短时间内多次调用
+    return new Promise((resolve) => {
+      generateAllExamplesTimer = setTimeout(async () => {
+        isGeneratingAllExamples = true
+        generateAllExamplesTimer = null
+        try {
+          // 构建完整配置（包含所有字段）
+          const config = buildTableConfig()
+          if (!config) {
+            console.warn('配置无效，无法生成示例值')
+            return
+          }
+          
+          // 检查是否有需要生成示例值的字段
+          const hasValidFields = fieldRules.value.some(field => field.ruleType && field.ruleType !== 'null')
+          if (!hasValidFields) {
+            return
+          }
+          
+          // 分离序列规则字段和其他字段
+          const incrementFields = [] // 序列规则字段（需要生成5条数据）
+          const otherFields = [] // 其他字段（只需要1条数据）
+          
+          fieldRules.value.forEach(field => {
+            if (field.ruleType && field.ruleType !== 'null') {
+              if (field.ruleType === 'increment') {
+                incrementFields.push(field)
+              } else {
+                otherFields.push(field)
+              }
+              // 设置所有字段的加载状态
+              fieldExampleLoading.value.set(field.fieldName, true)
+            }
+          })
+          
+          // 顺序处理：先批量请求其他字段，再单独请求序列规则字段（避免后端去重器冲突）
+          
+          // 1. 先批量请求其他字段（生成1条数据）
+          if (otherFields.length > 0) {
+            try {
+              // 构建只包含非序列规则字段的配置
+              const otherFieldsConfig = {
+                ...config,
+                field_rules: config.field_rules.filter(rule => {
+                  const field = fieldRules.value.find(f => f.fieldName === rule.field_name)
+                  return field && field.ruleType !== 'increment'
+                })
+              }
+              
+              const response = await api.previewData(connectionId.value, otherFieldsConfig, 1)
+              if (response.data && response.data.length > 0) {
+                const firstRow = response.data[0]
+                
+                // 处理非序列规则字段的示例值
+                otherFields.forEach(field => {
+                  const exampleValue = firstRow[field.fieldName]
+                  
+                  if (exampleValue !== null && exampleValue !== undefined) {
+                    // 格式化显示
+                    let displayValue = String(exampleValue)
+                    
+                    // 如果是日期类型，格式化日期显示
+                    const fieldType = (field.fieldType || field.type || '').toLowerCase()
+                    const goType = (field.goType || field.GoType || '').toLowerCase()
+                    if (fieldType.includes('date') || fieldType.includes('time') || goType.includes('time') || goType.includes('date')) {
+                      displayValue = formatDateExample(exampleValue, field)
+                    } else {
+                      displayValue = String(exampleValue)
+                    }
+                    
+                    // 如果太长，截断
+                    if (displayValue.length > 50) {
+                      displayValue = displayValue.substring(0, 50) + '...'
+                    }
+                    fieldExamples.value.set(field.fieldName, displayValue)
+                  } else {
+                    fieldExamples.value.set(field.fieldName, '(空)')
+                  }
+                  
+                  fieldExampleLoading.value.set(field.fieldName, false)
+                })
+              }
+            } catch (err) {
+              console.error('批量生成非序列字段示例失败:', err)
+              // 批量请求失败，逐个请求非序列字段
+              for (const field of otherFields) {
+                try {
+                  await generateFieldExample(field)
+                } catch (e) {
+                  fieldExamples.value.set(field.fieldName, '生成失败')
+                  fieldExampleLoading.value.set(field.fieldName, false)
+                }
+              }
+            }
+          }
+          
+          // 2. 再单独请求序列规则字段（生成5条数据，顺序执行避免去重器冲突）
+          if (incrementFields.length > 0) {
+            for (const field of incrementFields) {
+              try {
+                // 构建配置（只包含当前字段）
+                const fieldConfig = buildSingleFieldConfig(field)
+                if (!fieldConfig) {
+                  fieldExamples.value.set(field.fieldName, '配置无效')
+                  fieldExampleLoading.value.set(field.fieldName, false)
+                  continue
+                }
+                
+                // 序列规则生成5条数据
+                const response = await api.previewData(connectionId.value, fieldConfig, 5)
+                if (response.data && response.data.length > 0) {
+                  const values = response.data.map(row => {
+                    const value = row[field.fieldName]
+                    if (value !== null && value !== undefined) {
+                      return String(value)
+                    }
+                    return ''
+                  }).filter(v => v !== '')
+                  
+                  if (values.length > 0) {
+                    fieldExamples.value.set(field.fieldName, values.join(', ') + ', ...')
+                  } else {
+                    fieldExamples.value.set(field.fieldName, '生成失败')
+                  }
+                } else {
+                  fieldExamples.value.set(field.fieldName, '生成失败')
+                }
+              } catch (err) {
+                console.error(`生成序列字段 ${field.fieldName} 示例失败:`, err)
+                fieldExamples.value.set(field.fieldName, '生成失败')
+              } finally {
+                fieldExampleLoading.value.set(field.fieldName, false)
+              }
+            }
+          }
+        } catch (error) {
+          console.error('批量生成示例值失败:', error)
+          // 如果批量请求失败，回退到逐个请求
+          for (const field of fieldRules.value) {
+            if (field.ruleType && field.ruleType !== 'null') {
+              try {
+                await generateFieldExample(field)
+              } catch (err) {
+                console.error(`生成字段 ${field.fieldName} 示例失败:`, err)
+                fieldExamples.value.set(field.fieldName, '生成失败')
+                fieldExampleLoading.value.set(field.fieldName, false)
+              }
+            }
+          }
+        } finally {
+          isGeneratingAllExamples = false
+          resolve()
+        }
+      }, 300) // 300ms 防抖延迟
+    })
   }
   
   const loadTemplates = async () => {
@@ -3652,17 +3999,30 @@
             if (!Array.isArray(charSet)) {
               charSet = ['letters', 'numbers', 'chinese', 'special']
             }
-            rule.config = {
-              min_length: field.config.minLength || 10,
-              max_length: field.config.maxLength || 50,
+            // 根据长度模式决定使用固定长度还是随机长度
+            const lengthMode = field.config.lengthMode || (field.config.fixedLength > 0 ? 'fixed' : 'random')
+            const config = {
               char_set: charSet,
-              fixed_length: field.config.fixedLength || 0,
               case: field.config.case || 'mixed',
               number_position: field.config.numberPosition || 'none',
               prefix: field.config.prefix || '',
               suffix: field.config.suffix || '',
               custom_chars: field.config.customChars || ''
             }
+            
+            if (lengthMode === 'fixed' && field.config.fixedLength > 0) {
+              // 固定长度模式
+              config.fixed_length = field.config.fixedLength
+              config.min_length = 0
+              config.max_length = 0
+            } else {
+              // 随机长度模式
+              config.fixed_length = 0
+              config.min_length = field.config.minLength || 10
+              config.max_length = field.config.maxLength || 50
+            }
+            
+            rule.config = config
             break
           case 'random_number':
             rule.config = {
@@ -3878,7 +4238,10 @@
             if (!Array.isArray(charSet)) {
               charSet = ['letters', 'numbers', 'chinese', 'special']
             }
+            // 根据配置判断长度模式（兼容旧配置）
+            const lengthMode = (ruleConfig.fixed_length > 0) ? 'fixed' : 'random'
             fieldRule.config = {
+              lengthMode: lengthMode,
               minLength: ruleConfig.min_length || 10,
               maxLength: ruleConfig.max_length || 50,
               charSet: charSet,
@@ -4828,12 +5191,14 @@
       }
       
       // 使用 onRuleTypeChange 来确保配置正确应用（包括序列规则的 maxValue、随机文本规则的 charSet 等）
-      onRuleTypeChange(field)
+      // 传入 skipExample: true 跳过单个字段的示例值生成，统一在最后批量生成
+      onRuleTypeChange(field, { skipExample: true })
     })
-    // 重新生成所有字段的示例值
+    // 重新生成所有字段的示例值（延迟更长时间，确保外键表列表加载完成）
+    // 使用批量请求，一次获取所有字段的示例值
     setTimeout(() => {
       generateAllFieldExamples()
-    }, 100)
+    }, 500)
     ElMessage.success('已重置所有字段规则')
   }
   

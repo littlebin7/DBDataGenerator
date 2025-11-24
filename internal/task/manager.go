@@ -1,6 +1,7 @@
 package task
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -15,9 +16,10 @@ import (
 type Manager struct {
 	tasks          map[string]*Task
 	pools          map[string]*WorkerPool
-	monitors       map[string]chan struct{}  // 监控协程停止通道
-	lastPushState  map[string]*taskPushState // 上次推送的状态（用于去重）
-	lastPushTime   map[string]time.Time      // 上次推送时间（用于频率限制）
+	monitors       map[string]chan struct{}        // 监控协程停止通道
+	lastPushState  map[string]*taskPushState       // 上次推送的状态（用于去重）
+	lastPushTime   map[string]time.Time            // 上次推送时间（用于频率限制）
+	primaryKeyGens map[string]*PrimaryKeyGenerator // 主键生成器（任务ID -> 生成器）
 	mu             sync.RWMutex
 	connMgr        database.ConnectionManagerInterface
 	wsHub          interface{ Broadcast(message interface{}) } // WebSocket Hub接口
@@ -44,6 +46,7 @@ func NewManager(connMgr database.ConnectionManagerInterface) *Manager {
 		monitors:       make(map[string]chan struct{}),
 		lastPushState:  make(map[string]*taskPushState),
 		lastPushTime:   make(map[string]time.Time),
+		primaryKeyGens: make(map[string]*PrimaryKeyGenerator),
 		connMgr:        connMgr,
 		wsHub:          nil,
 		historyManager: nil, // 稍后通过SetHistoryManager设置
@@ -198,6 +201,12 @@ func (m *Manager) CreateTask(name, connectionID string, config *generator.TableC
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// 从配置中读取线程数，如果没有则使用默认值
+	threadCount := config.ThreadCount
+	if threadCount <= 0 || threadCount > MaxThreadCount {
+		threadCount = DefaultThreadCount
+	}
+
 	task := &Task{
 		ID:           uuid.New().String(),
 		Name:         name,
@@ -206,7 +215,7 @@ func (m *Manager) CreateTask(name, connectionID string, config *generator.TableC
 		Table:        config.TableName,
 		Config:       config,
 		Status:       TaskStatusPending,
-		ThreadCount:  DefaultThreadCount,
+		ThreadCount:  threadCount,
 		TotalRows:    config.TotalRows,
 		Progress:     0,
 	}
@@ -449,6 +458,46 @@ func (m *Manager) RetryTask(taskID string) error {
 	return err
 }
 
+// findPrimaryKeyRule 查找主键规则
+func (m *Manager) findPrimaryKeyRule(config *generator.TableConfig) (*generator.FieldRule, error) {
+	for i := range config.FieldRules {
+		rule := &config.FieldRules[i]
+		if rule.IsPrimaryKey {
+			// 检查主键规则类型：必须是 increment 或 function（UUID）
+			if rule.RuleType == "increment" || rule.RuleType == "function" {
+				// 如果是 function，检查是否是 UUID
+				if rule.RuleType == "function" {
+					var funcConfig generator.FunctionConfig
+					if err := unmarshalConfig(rule.Config, &funcConfig); err == nil {
+						if funcConfig.FuncName == "UUID" {
+							return rule, nil
+						}
+					}
+					// 如果不是 UUID，不支持多线程
+					return nil, fmt.Errorf("主键规则类型 %s 不支持多线程，仅支持序列（increment）和UUID（function）", rule.RuleType)
+				}
+				return rule, nil
+			}
+			return nil, fmt.Errorf("主键规则类型 %s 不支持多线程，仅支持序列（increment）和UUID（function）", rule.RuleType)
+		}
+	}
+	return nil, fmt.Errorf("未找到主键规则，多线程模式需要主键规则为序列（increment）或UUID（function）")
+}
+
+// unmarshalConfig 反序列化配置（辅助函数）
+func unmarshalConfig(config interface{}, target interface{}) error {
+	configBytes, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("序列化配置失败: %w", err)
+	}
+
+	if err := json.Unmarshal(configBytes, target); err != nil {
+		return fmt.Errorf("反序列化配置失败: %w", err)
+	}
+
+	return nil
+}
+
 // StartTask 启动任务
 func (m *Manager) StartTask(taskID string) error {
 	m.mu.Lock()
@@ -511,9 +560,20 @@ func (m *Manager) StartTask(taskID string) error {
 	// 创建生成引擎
 	engine := generator.NewEngine(conn.Database)
 
+	// 如果线程数 > 1，需要创建任务组
+	if task.ThreadCount > 1 {
+		return m.startTaskGroup(task, conn.Database, engine)
+	}
+
+	// 单线程模式：使用原有逻辑
+	return m.startSingleThreadTask(task, conn.Database, engine)
+}
+
+// startSingleThreadTask 启动单线程任务（原有逻辑）
+func (m *Manager) startSingleThreadTask(task *Task, db database.Database, engine *generator.Engine) error {
 	// 创建协程池
-	pool := NewWorkerPool(taskID, task.ThreadCount, conn.Database, engine, task.Config, task)
-	m.pools[taskID] = pool
+	pool := NewWorkerPool(task.ID, task.ThreadCount, db, engine, task.Config, task)
+	m.pools[task.ID] = pool
 
 	// 设置任务更新回调
 	pool.SetUpdateCallback(func(t *Task) {
@@ -558,12 +618,172 @@ func (m *Manager) StartTask(taskID string) error {
 	m.saveTaskToDB(task)
 
 	// 启动数据生成
-	go m.runTask(taskID, pool)
+	go m.runTask(task.ID, pool)
 
 	// 启动任务进度监控
 	stopChan := make(chan struct{})
-	m.monitors[taskID] = stopChan
-	go m.monitorTaskProgress(taskID, stopChan)
+	m.monitors[task.ID] = stopChan
+	go m.monitorTaskProgress(task.ID, stopChan)
+
+	return nil
+}
+
+// startTaskGroup 启动多线程任务组
+func (m *Manager) startTaskGroup(task *Task, db database.Database, engine *generator.Engine) error {
+	// 查找主键规则
+	primaryKeyRule, err := m.findPrimaryKeyRule(task.Config)
+	if err != nil {
+		return fmt.Errorf("多线程模式需要主键规则: %w", err)
+	}
+
+	// 创建主键生成器
+	primaryKeyGen, err := NewPrimaryKeyGenerator(primaryKeyRule, task.Config, task.ThreadCount)
+	if err != nil {
+		return fmt.Errorf("创建主键生成器失败: %w", err)
+	}
+	m.primaryKeyGens[task.ID] = primaryKeyGen
+
+	// 将当前任务标记为任务组
+	task.mu.Lock()
+	task.IsTaskGroup = true
+	task.SubTaskIDs = make([]string, 0, task.ThreadCount)
+	task.mu.Unlock()
+
+	// 计算每个子任务的数据范围
+	rowsPerThread := task.TotalRows / int64(task.ThreadCount)
+	remainder := task.TotalRows % int64(task.ThreadCount)
+
+	// 创建子任务
+	subTasks := make([]*Task, task.ThreadCount)
+	now := time.Now()
+	for i := 0; i < task.ThreadCount; i++ {
+		subTaskRows := rowsPerThread
+		if i < int(remainder) {
+			subTaskRows++ // 余数分配给前几个线程
+		}
+
+		// 创建子任务配置（复制原配置，但修改总行数）
+		subTaskConfig := *task.Config
+		subTaskConfig.TotalRows = subTaskRows
+
+		// 创建子任务
+		subTask := &Task{
+			ID:            uuid.New().String(),
+			Name:          fmt.Sprintf("%s-线程%d", task.Name, i+1),
+			ConnectionID:  task.ConnectionID,
+			Database:      task.Database,
+			Table:         task.Table,
+			Config:        &subTaskConfig,
+			Status:        TaskStatusPending,
+			ThreadCount:   1, // 子任务固定为1个线程
+			TotalRows:     subTaskRows,
+			GeneratedRows: 0,
+			SuccessRows:   0,
+			FailedRows:    0,
+			StartTime:     &now,
+			Progress:      0,
+			IsTaskGroup:   false,
+			ParentTaskID:  task.ID,
+			ThreadIndex:   i,
+		}
+
+		subTasks[i] = subTask
+		task.SubTaskIDs = append(task.SubTaskIDs, subTask.ID)
+
+		// 将子任务添加到任务管理器
+		m.tasks[subTask.ID] = subTask
+		m.saveTaskToDB(subTask)
+	}
+
+	// 更新任务组状态
+	task.StartTime = &now
+	task.SetStatus(TaskStatusRunning)
+	m.saveTaskToDB(task)
+
+	// 启动所有子任务
+	for i, subTask := range subTasks {
+		subTask := subTask
+		threadIndex := i
+		go func() {
+			if err := m.startSubTask(subTask, db, engine, primaryKeyGen, threadIndex); err != nil {
+				// 子任务启动失败，更新任务组状态
+				m.mu.Lock()
+				task.mu.Lock()
+				task.Error = fmt.Sprintf("子任务 %s 启动失败: %v", subTask.ID, err)
+				task.mu.Unlock()
+				m.saveTaskToDB(task)
+				m.broadcastTaskUpdate(task)
+				m.mu.Unlock()
+			}
+		}()
+	}
+
+	// 启动任务组进度监控
+	stopChan := make(chan struct{})
+	m.monitors[task.ID] = stopChan
+	go m.monitorTaskGroupProgress(task.ID, stopChan)
+
+	return nil
+}
+
+// startSubTask 启动子任务
+func (m *Manager) startSubTask(subTask *Task, db database.Database, engine *generator.Engine, primaryKeyGen *PrimaryKeyGenerator, threadIndex int) error {
+	// 创建协程池（子任务固定为1个线程）
+	pool := NewWorkerPool(subTask.ID, 1, db, engine, subTask.Config, subTask)
+	pool.SetPrimaryKeyGenerator(primaryKeyGen, threadIndex) // 设置主键生成器
+
+	m.mu.Lock()
+	m.pools[subTask.ID] = pool
+	m.mu.Unlock()
+
+	// 设置任务更新回调
+	pool.SetUpdateCallback(func(t *Task) {
+		m.saveTaskToDB(t)
+		m.broadcastTaskUpdate(t)
+		// 更新任务组状态
+		m.updateTaskGroupStatus(t.ParentTaskID)
+	})
+
+	// 设置任务完成回调
+	pool.SetCompleteCallback(func(t *Task) {
+		// 确保任务完成时设置了结束时间
+		if t.EndTime == nil {
+			now := time.Now()
+			t.EndTime = &now
+		}
+		// 确保进度是100%
+		t.mu.Lock()
+		if t.Progress < 100 {
+			t.Progress = 100
+		}
+		t.mu.Unlock()
+
+		m.saveTaskToDB(t)
+		m.broadcastTaskUpdate(t)
+
+		// 更新任务组状态
+		m.updateTaskGroupStatus(t.ParentTaskID)
+
+		// 检查所有子任务是否完成
+		m.checkTaskGroupComplete(t.ParentTaskID)
+	})
+
+	// 启动协程池
+	pool.Start()
+
+	// 更新子任务状态
+	subTask.SetStatus(TaskStatusRunning)
+	m.saveTaskToDB(subTask)
+
+	// 启动数据生成
+	go m.runTask(subTask.ID, pool)
+
+	// 启动子任务进度监控
+	m.mu.Lock()
+	stopChan := make(chan struct{})
+	m.monitors[subTask.ID] = stopChan
+	m.mu.Unlock()
+	go m.monitorTaskProgress(subTask.ID, stopChan)
 
 	return nil
 }
@@ -855,5 +1075,165 @@ func (m *Manager) saveTaskHistory(task *Task) {
 				// 可以使用日志记录
 			}
 		}()
+	}
+}
+
+// updateTaskGroupStatus 更新任务组状态（聚合所有子任务的状态）
+func (m *Manager) updateTaskGroupStatus(taskGroupID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	taskGroup, exists := m.tasks[taskGroupID]
+	if !exists || !taskGroup.IsTaskGroup {
+		return
+	}
+
+	// 聚合所有子任务的状态
+	var totalGenerated, totalSuccess, totalFailed int64
+	var totalSpeed float64
+	var allCompleted, allRunning, hasError, hasPaused bool
+
+	for _, subTaskID := range taskGroup.SubTaskIDs {
+		subTask, exists := m.tasks[subTaskID]
+		if !exists {
+			continue
+		}
+
+		subTask.mu.RLock()
+		totalGenerated += subTask.GeneratedRows
+		totalSuccess += subTask.SuccessRows
+		totalFailed += subTask.FailedRows
+		totalSpeed += subTask.Speed
+
+		status := subTask.Status
+		subTask.mu.RUnlock()
+
+		if status == TaskStatusCompleted {
+			allCompleted = true
+		} else if status == TaskStatusRunning {
+			allRunning = true
+		} else if status == TaskStatusError {
+			hasError = true
+		} else if status == TaskStatusPaused {
+			hasPaused = true
+		}
+	}
+
+	// 更新任务组状态
+	taskGroup.mu.Lock()
+	taskGroup.GeneratedRows = totalGenerated
+	taskGroup.SuccessRows = totalSuccess
+	taskGroup.FailedRows = totalFailed
+	taskGroup.Speed = totalSpeed
+
+	if taskGroup.TotalRows > 0 {
+		taskGroup.Progress = float64(totalGenerated) / float64(taskGroup.TotalRows) * 100
+	}
+
+	// 确定任务组状态
+	if hasError {
+		taskGroup.Status = TaskStatusError
+	} else if hasPaused {
+		taskGroup.Status = TaskStatusPaused
+	} else if allCompleted && !allRunning {
+		// 所有子任务都完成且没有运行中的
+		taskGroup.Status = TaskStatusCompleted
+	} else if allRunning || taskGroup.Status == TaskStatusPending {
+		taskGroup.Status = TaskStatusRunning
+	}
+
+	taskGroup.mu.Unlock()
+
+	m.saveTaskToDB(taskGroup)
+	m.broadcastTaskUpdate(taskGroup)
+}
+
+// checkTaskGroupComplete 检查任务组是否完成
+func (m *Manager) checkTaskGroupComplete(taskGroupID string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	taskGroup, exists := m.tasks[taskGroupID]
+	if !exists || !taskGroup.IsTaskGroup {
+		return
+	}
+
+	// 检查所有子任务是否都完成
+	allCompleted := true
+	for _, subTaskID := range taskGroup.SubTaskIDs {
+		subTask, exists := m.tasks[subTaskID]
+		if !exists {
+			allCompleted = false
+			break
+		}
+
+		subTask.mu.RLock()
+		status := subTask.Status
+		subTask.mu.RUnlock()
+
+		if status != TaskStatusCompleted && status != TaskStatusError {
+			allCompleted = false
+			break
+		}
+	}
+
+	if allCompleted {
+		// 所有子任务都完成，更新任务组状态
+		now := time.Now()
+		taskGroup.mu.Lock()
+		if taskGroup.EndTime == nil {
+			taskGroup.EndTime = &now
+		}
+		if taskGroup.Progress < 100 {
+			taskGroup.Progress = 100
+		}
+		// 如果所有子任务都成功完成，任务组状态为已完成
+		hasError := false
+		for _, subTaskID := range taskGroup.SubTaskIDs {
+			subTask, exists := m.tasks[subTaskID]
+			if exists {
+				subTask.mu.RLock()
+				if subTask.Status == TaskStatusError {
+					hasError = true
+				}
+				subTask.mu.RUnlock()
+			}
+		}
+		if !hasError {
+			taskGroup.Status = TaskStatusCompleted
+		} else {
+			taskGroup.Status = TaskStatusError
+		}
+		taskGroup.mu.Unlock()
+
+		m.saveTaskToDB(taskGroup)
+		m.broadcastTaskUpdateImmediate(taskGroup)
+		m.saveTaskHistory(taskGroup)
+
+		// 调用外部设置的回调
+		m.mu.RLock()
+		onComplete := m.onTaskComplete
+		m.mu.RUnlock()
+		if onComplete != nil {
+			onComplete(taskGroup)
+		}
+
+		// 清理主键生成器
+		delete(m.primaryKeyGens, taskGroupID)
+	}
+}
+
+// monitorTaskGroupProgress 监控任务组进度
+func (m *Manager) monitorTaskGroupProgress(taskGroupID string, stopChan chan struct{}) {
+	ticker := time.NewTicker(MonitorInterval * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-stopChan:
+			return
+		case <-ticker.C:
+			m.updateTaskGroupStatus(taskGroupID)
+		}
 	}
 }

@@ -1,6 +1,7 @@
 {
   "name": "db-data-generator-web",
   "version": "1.0.0",
+  "type": "module",
   "description": "数据库造数工具前端",
   "scripts": {
     "dev": "vite",

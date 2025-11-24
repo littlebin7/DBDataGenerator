@@ -23,6 +23,7 @@ type TableConfig struct {
 	Database       string      `json:"database"`        // 数据库名
 	TotalRows      int64       `json:"total_rows"`      // 总生成数量
 	BatchSize      int         `json:"batch_size"`      // 每批插入数量
+	ThreadCount    int         `json:"thread_count"`    // 线程数（1-10，用于多线程任务组）
 	FieldRules     []FieldRule `json:"field_rules"`     // 字段规则列表
 	UseTransaction bool        `json:"use_transaction"` // 是否使用事务
 	OnError        string      `json:"on_error"`        // 错误处理：skip/retry/stop

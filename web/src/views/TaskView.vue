@@ -43,9 +43,71 @@
         style="width: 100%" 
         v-loading="loading"
         @selection-change="handleSelectionChange"
+        row-key="id"
+        :default-expand-all="false"
       >
-        <el-table-column type="selection" width="55" />
-        <el-table-column prop="name" label="任务名" width="200" />
+        <el-table-column type="selection" width="55" :selectable="(row) => !row.parent_task_id" />
+        <el-table-column type="expand" width="50">
+          <template #default="scope">
+            <div v-if="scope.row.is_task_group && scope.row.sub_task_ids && scope.row.sub_task_ids.length > 0" style="padding: 10px 0 10px 50px; background-color: #f5f7fa;">
+              <div style="font-weight: bold; margin-bottom: 10px; color: #606266;">子任务列表 ({{ scope.row.sub_task_ids.length }})</div>
+              <el-table 
+                :data="getSubTasks(scope.row.sub_task_ids)" 
+                border
+                size="small"
+                style="width: 100%"
+              >
+                <el-table-column prop="name" label="子任务名" width="200" />
+                <el-table-column prop="table" label="表名" width="150" />
+                <el-table-column label="状态" width="100">
+                  <template #default="subScope">
+                    <StatusTag :status="subScope.row.status" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="进度" width="200">
+                  <template #default="subScope">
+                    <div style="display: flex; align-items: center; gap: 8px">
+                      <el-progress :percentage="Math.round(subScope.row.progress)" style="flex: 1" />
+                    </div>
+                    <div style="font-size: 12px; color: #909399; margin-top: 5px">
+                      {{ subScope.row.generated_rows || 0 }} / {{ subScope.row.total_rows || 0 }}
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="统计信息" width="250">
+                  <template #default="subScope">
+                    <div style="font-size: 12px">
+                      <div>成功: <span style="color: #67c23a">{{ subScope.row.success_rows || 0 }}</span></div>
+                      <div>失败: <span style="color: #f56c6c">{{ subScope.row.failed_rows || 0 }}</span></div>
+                      <div v-if="subScope.row.speed > 0">速度: {{ formatSpeed(subScope.row.speed) }}</div>
+                    </div>
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="150" fixed="right">
+                  <template #default="subScope">
+                    <el-button 
+                      size="small" 
+                      :loading="getActionLoading(subScope.row.id, 'detail')"
+                      :disabled="getActionLoading(subScope.row.id)"
+                      @click="viewTaskDetail(subScope.row)"
+                    >
+                      详情
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="name" label="任务名" width="200">
+          <template #default="scope">
+            <div style="display: flex; align-items: center; gap: 8px">
+              <el-tag v-if="scope.row.is_task_group" type="info" size="small">任务组</el-tag>
+              <el-tag v-else-if="scope.row.parent_task_id" type="warning" size="small">子任务</el-tag>
+              <span>{{ scope.row.name }}</span>
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column prop="table" label="表名" width="150" />
         <el-table-column prop="connection_id" label="连接ID" width="200" />
         <el-table-column label="状态" width="100">
@@ -101,7 +163,12 @@
         </el-table-column>
         <el-table-column label="操作" width="280" fixed="right">
           <template #default="scope">
-            <div style="display: flex; flex-wrap: wrap; gap: 4px;">
+            <!-- 子任务不显示操作按钮（由任务组管理） -->
+            <div v-if="scope.row.parent_task_id" style="color: #909399; font-size: 12px;">
+              由任务组管理
+            </div>
+            <!-- 任务组和普通任务的操作按钮 -->
+            <div v-else style="display: flex; flex-wrap: wrap; gap: 4px;">
               <el-button 
                 v-if="scope.row.status === 'pending' || scope.row.status === 'stopped' || scope.row.status === 'completed'"
                 size="small" 
@@ -199,16 +266,31 @@
       <div v-if="selectedTask">
         <el-descriptions :column="2" border>
           <el-descriptions-item label="任务ID">{{ selectedTask.id }}</el-descriptions-item>
-          <el-descriptions-item label="任务名称">{{ selectedTask.name }}</el-descriptions-item>
+          <el-descriptions-item label="任务名称">
+            <div style="display: flex; align-items: center; gap: 8px">
+              <el-tag v-if="selectedTask.is_task_group" type="info" size="small">
+                <el-icon style="margin-right: 4px"><Folder /></el-icon>
+                任务组
+              </el-tag>
+              <el-tag v-else-if="selectedTask.parent_task_id" type="warning" size="small">子任务</el-tag>
+              <span>{{ selectedTask.name }}</span>
+            </div>
+          </el-descriptions-item>
           <el-descriptions-item label="表名">{{ selectedTask.table }}</el-descriptions-item>
           <el-descriptions-item label="数据库">{{ selectedTask.database }}</el-descriptions-item>
           <el-descriptions-item label="连接ID">{{ selectedTask.connection_id }}</el-descriptions-item>
+          <el-descriptions-item label="线程数" v-if="selectedTask.is_task_group">
+            {{ selectedTask.thread_count || selectedTask.sub_task_ids?.length || 0 }}
+          </el-descriptions-item>
           <el-descriptions-item label="状态">
             <el-tag :type="getStatusType(selectedTask.status)">
               {{ getStatusText(selectedTask.status) }}
             </el-tag>
           </el-descriptions-item>
           <el-descriptions-item label="总行数">{{ selectedTask.total_rows }}</el-descriptions-item>
+          <el-descriptions-item label="子任务数" v-if="selectedTask.is_task_group && selectedTask.sub_task_ids">
+            {{ selectedTask.sub_task_ids.length }}
+          </el-descriptions-item>
           <el-descriptions-item label="已生成">{{ selectedTask.generated_rows || 0 }}</el-descriptions-item>
           <el-descriptions-item label="成功">{{ selectedTask.success_rows || 0 }}</el-descriptions-item>
           <el-descriptions-item label="失败">{{ selectedTask.failed_rows || 0 }}</el-descriptions-item>
@@ -235,6 +317,49 @@
             />
           </el-descriptions-item>
         </el-descriptions>
+
+        <!-- 任务组的子任务列表 -->
+        <div v-if="selectedTask.is_task_group && selectedTask.sub_task_ids && selectedTask.sub_task_ids.length > 0" style="margin-top: 20px">
+          <el-divider>子任务列表</el-divider>
+          <el-table 
+            :data="getSubTasks(selectedTask.sub_task_ids)" 
+            border 
+            stripe
+            max-height="400"
+            style="width: 100%"
+          >
+            <el-table-column prop="name" label="子任务名" width="200" />
+            <el-table-column label="状态" width="100">
+              <template #default="scope">
+                <StatusTag :status="scope.row.status" />
+              </template>
+            </el-table-column>
+            <el-table-column label="进度" width="150">
+              <template #default="scope">
+                <el-progress :percentage="Math.round(scope.row.progress)" />
+                <div style="font-size: 12px; color: #909399; margin-top: 5px">
+                  {{ scope.row.generated_rows || 0 }} / {{ scope.row.total_rows || 0 }}
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="成功" width="100">
+              <template #default="scope">
+                <span style="color: #67c23a">{{ scope.row.success_rows || 0 }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="失败" width="100">
+              <template #default="scope">
+                <span style="color: #f56c6c">{{ scope.row.failed_rows || 0 }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="速度" width="120">
+              <template #default="scope">
+                <span v-if="scope.row.speed > 0">{{ formatSpeed(scope.row.speed) }}</span>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
+          </el-table>
+        </div>
 
         <!-- 字段规则配置（单独显示） -->
         <div v-if="selectedTask.config && selectedTask.config.field_rules" style="margin-top: 20px">
@@ -270,7 +395,7 @@
 import { ref, onMounted, computed, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Search, Connection, CircleCheck, Loading, Warning } from '@element-plus/icons-vue'
+import { Refresh, Search, Connection, CircleCheck, Loading, Warning, Folder } from '@element-plus/icons-vue'
 import api from '../api'
 import { formatTime, formatDuration, formatSpeed } from '../utils/formatters'
 import { TASK_STATUS_TYPE, TASK_STATUS_TEXT, WS_CONNECTION_STATUS, WS_CONNECTION_STATUS_TEXT, WS_CONNECTION_STATUS_COLOR, RECONNECT_CONFIG } from '../utils/constants'

@@ -77,18 +77,19 @@ type TableSchema struct {
 
 // FieldInfo 字段信息
 type FieldInfo struct {
-	Name         string      `json:"name"`           // 字段名
-	Type         string      `json:"type"`           // 字段类型（数据库原生类型）
-	GoType       string      `json:"go_type"`        // Go 类型映射
-	IsPrimaryKey bool        `json:"is_primary_key"` // 是否主键
-	IsForeignKey bool        `json:"is_foreign_key"` // 是否外键
-	ForeignTable string      `json:"foreign_table"`  // 外键关联表
-	IsUnique     bool        `json:"is_unique"`      // 是否唯一
-	IsNullable   bool        `json:"is_nullable"`    // 是否可空
-	DefaultValue interface{} `json:"default_value"`  // 默认值
-	MaxLength    int         `json:"max_length"`     // 最大长度（字符串类型）
-	Precision    int         `json:"precision"`      // 精度（数字类型）
-	Scale        int         `json:"scale"`          // 小数位数
-	EnumValues   []string    `json:"enum_values"`    // 枚举值（ENUM 类型）
-	Comment      string      `json:"comment"`        // 字段注释
+	Name            string      `json:"name"`             // 字段名
+	Type            string      `json:"type"`             // 字段类型（数据库原生类型）
+	GoType          string      `json:"go_type"`          // Go 类型映射
+	IsPrimaryKey    bool        `json:"is_primary_key"`   // 是否主键
+	IsForeignKey    bool        `json:"is_foreign_key"`   // 是否外键
+	ForeignTable    string      `json:"foreign_table"`    // 外键关联表
+	ForeignDatabase string      `json:"foreign_database"` // 外键关联数据库/模式（可选，跨模式外键时使用）
+	IsUnique        bool        `json:"is_unique"`        // 是否唯一
+	IsNullable      bool        `json:"is_nullable"`      // 是否可空
+	DefaultValue    interface{} `json:"default_value"`    // 默认值
+	MaxLength       int         `json:"max_length"`       // 最大长度（字符串类型）
+	Precision       int         `json:"precision"`        // 精度（数字类型）
+	Scale           int         `json:"scale"`            // 小数位数
+	EnumValues      []string    `json:"enum_values"`      // 枚举值（ENUM 类型）
+	Comment         string      `json:"comment"`          // 字段注释
 }

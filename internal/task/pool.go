@@ -15,24 +15,26 @@ type TaskUpdateCallback func(task *Task)
 
 // WorkerPool 协程池
 type WorkerPool struct {
-	taskID      string
-	threadCount int
-	workers     []*Worker
-	taskChan    chan *WorkItem
-	resultChan  chan *WorkResult
-	ctx         context.Context
-	cancel      context.CancelFunc
-	pauseChan   chan struct{}
-	resumeChan  chan struct{}
-	isPaused    bool
-	mu          sync.RWMutex
-	db          database.Database
-	engine      *generator.Engine
-	config      *generator.TableConfig
-	task        *Task
-	onUpdate    TaskUpdateCallback // 任务更新回调
-	onComplete  TaskUpdateCallback // 任务完成回调
-	stopWorkers []chan struct{}    // 用于停止特定 worker 的通道
+	taskID        string
+	threadCount   int
+	workers       []*Worker
+	taskChan      chan *WorkItem
+	resultChan    chan *WorkResult
+	ctx           context.Context
+	cancel        context.CancelFunc
+	pauseChan     chan struct{}
+	resumeChan    chan struct{}
+	isPaused      bool
+	mu            sync.RWMutex
+	db            database.Database
+	engine        *generator.Engine
+	config        *generator.TableConfig
+	task          *Task
+	onUpdate      TaskUpdateCallback   // 任务更新回调
+	onComplete    TaskUpdateCallback   // 任务完成回调
+	stopWorkers   []chan struct{}      // 用于停止特定 worker 的通道
+	primaryKeyGen *PrimaryKeyGenerator // 主键生成器（用于多线程任务组）
+	threadIndex   int                  // 线程索引（用于多线程任务组）
 }
 
 // WorkItem 工作项
@@ -89,6 +91,14 @@ func (p *WorkerPool) SetCompleteCallback(callback TaskUpdateCallback) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.onComplete = callback
+}
+
+// SetPrimaryKeyGenerator 设置主键生成器（用于多线程任务组）
+func (p *WorkerPool) SetPrimaryKeyGenerator(gen *PrimaryKeyGenerator, threadIndex int) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.primaryKeyGen = gen
+	p.threadIndex = threadIndex
 }
 
 // Start 启动协程池
@@ -309,6 +319,32 @@ func (w *Worker) execute(item *WorkItem) *WorkResult {
 		return &WorkResult{
 			FailedCount: int64(item.BatchSize),
 			Error:       err,
+		}
+	}
+
+	// 如果使用主键生成器（多线程任务组），替换主键值
+	if w.pool.primaryKeyGen != nil {
+		// 查找主键字段名
+		var primaryKeyFieldName string
+		for _, rule := range w.pool.config.FieldRules {
+			if rule.IsPrimaryKey {
+				primaryKeyFieldName = rule.FieldName
+				break
+			}
+		}
+
+		if primaryKeyFieldName != "" {
+			// 为每行数据生成主键值
+			for i := range rows {
+				primaryKey, err := w.pool.primaryKeyGen.GetNextPrimaryKey(w.pool.threadIndex)
+				if err != nil {
+					return &WorkResult{
+						FailedCount: int64(len(rows)),
+						Error:       fmt.Errorf("生成主键失败: %w", err),
+					}
+				}
+				rows[i][primaryKeyFieldName] = primaryKey
+			}
 		}
 	}
 

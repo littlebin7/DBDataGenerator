@@ -55,6 +55,10 @@ fi
 echo ""
 echo "[4/4] 构建后端..."
 echo "正在编译 Go 程序..."
+echo ""
+echo "注意: 当前使用 Go 1.25.4 编译，生成的可执行文件需要 Windows 10 或更高版本"
+echo "      如需在 Windows 7 上运行，请使用 Go 1.20 或更早版本编译"
+echo ""
 mkdir -p dist
 export CGO_ENABLED=0
 export GOOS=linux

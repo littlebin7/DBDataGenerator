@@ -79,15 +79,16 @@ func (g *RandomStringGenerator) Generate(rule *FieldRule, index int64) (interfac
 	// 确保 config.CharSet 有值（如果解析后为空，使用我们处理过的值）
 	if len(config.CharSet) == 0 {
 		config.CharSet = charSetTypes
-	} else {
-		charSetTypes = config.CharSet
 	}
 
-	// 如果设置了固定长度，使用固定长度
+	// 根据配置决定使用固定长度还是随机长度
+	// 如果 fixed_length > 0，使用固定长度；否则使用随机长度（min_length 和 max_length）
 	var length int
 	if config.FixedLength > 0 {
+		// 固定长度模式
 		length = config.FixedLength
 	} else {
+		// 随机长度模式
 		minLen := config.MinLength
 		if minLen == 0 {
 			minLen = 10

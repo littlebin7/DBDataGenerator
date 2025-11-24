@@ -1,8 +1,10 @@
 package task
 
 const (
-	// DefaultThreadCount 默认线程数（单个任务不拆分多线程，固定为1）
+	// DefaultThreadCount 默认线程数
 	DefaultThreadCount = 1
+	// MaxThreadCount 最大线程数
+	MaxThreadCount = 10
 
 	// DefaultChannelBufferSize 默认 channel 缓冲区大小
 	DefaultChannelBufferSize = 100
